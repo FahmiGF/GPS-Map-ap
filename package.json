@@ -1,0 +1,30 @@
+{
+  "name": "nexmap",
+  "version": "1.1.0",
+  "description": "NEXMAP — Open World GPS, Smart Mobility & Civic Gamification Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node database/seed.js",
+    "test": "node --test tests/nexmap.test.js",
+    "smoke": "node scripts/smoke.js",
+    "inspect": "node scripts/inspect.js",
+    "check:dom": "node scripts/check-dom.js",
+    "verify": "node --test tests/nexmap.test.js && node scripts/smoke.js"
+  },
+  "keywords": [
+    "gps",
+    "maps",
+    "smart-mobility",
+    "gamification",
+    "crowdsourcing",
+    "traffic-intelligence"
+  ],
+  "author": "NEXMAP Core Team",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

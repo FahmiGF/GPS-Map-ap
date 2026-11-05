@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Local database (runtime data)
+database/*.db
+database/*.db-*
+database/*.sqlite
+database/*.sqlite-*
+
+# User-uploaded evidence
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

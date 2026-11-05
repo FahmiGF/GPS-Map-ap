@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXMAP — Open World GPS & Smart Mobility Platform</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- TOP HUD BAR -->
+  <header class="hud-bar">
+    <div class="brand">
+      <div class="brand-logo"><span>⚡ NEXMAP</span></div>
+      <span class="brand-badge" id="ws-status-badge">🛰️ CONNECTING</span>
+    </div>
+
+    <nav class="nav-tabs">
+      <button class="nav-tab-btn active" data-view="map">🗺️ Peta</button>
+      <button class="nav-tab-btn" data-modal="gamification-modal">🏆 Gamifikasi</button>
+      <button class="nav-tab-btn" data-modal="store-modal">💎 NEX Store</button>
+      <button class="nav-tab-btn" data-modal="news-modal">📰 Berita Lalin</button>
+      <button class="nav-tab-btn" data-modal="safety-modal">🛡️ Safety</button>
+      <button class="nav-tab-btn" data-modal="profile-modal">👤 Profil</button>
+      <button class="nav-tab-btn" data-modal="help-modal">❓ Bantuan</button>
+      <button class="nav-tab-btn" data-modal="admin-modal">⚙️ Admin</button>
+    </nav>
+
+    <div class="user-hud">
+      <div class="wallet-badge">
+        <div class="currency-item coins" title="NEX Coins">
+          <span>🪙</span><span id="hud-coins">—</span>
+        </div>
+        <div class="currency-item gems" title="NEX Gems">
+          <span>💎</span><span id="hud-gems">—</span>
+        </div>
+        <button class="btn-topup-quick" id="btn-open-topup">+ Top Up</button>
+      </div>
+
+      <div class="user-profile-summary">
+        <div class="avatar-ring" id="hud-avatar">
+          <span id="hud-avatar-icon">🏍️</span>
+          <span class="user-level-tag" id="hud-level">LV.1</span>
+        </div>
+        <div class="user-text-info">
+          <div class="username-title">
+            <span id="hud-username">NEX_Rider</span>
+            <span style="font-size: 10px; color: var(--accent-cyan);" id="hud-title">Urban Explorer</span>
+          </div>
+          <div class="xp-progress-bar-bg" title="Progress XP ke level selanjutnya">
+            <div class="xp-progress-bar-fill" id="hud-xp-fill" style="width: 45%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT -->
+  <main class="main-viewport">
+    <div id="map-container"></div>
+
+    <!-- LEFT PANEL -->
+    <div class="floating-overlay-left">
+      <div class="glass-panel">
+        <div class="panel-header">
+          <div class="panel-title"><span>🧭 Navigasi & Rute Pintar</span></div>
+          <span style="font-size: 11px; color: var(--accent-green); font-weight: 700;">LIVE</span>
+        </div>
+
+        <div class="nav-search-box">
+          <div class="input-group">
+            <span style="margin-right: 6px;">📍</span>
+            <input type="text" id="nav-origin" value="Monas Jakarta (Titik Awal)" readonly />
+          </div>
+          <div class="input-group">
+            <span style="margin-right: 6px;">🏁</span>
+            <input type="text" id="nav-destination" placeholder="Cari destinasi tujuan..." value="Gelora Bung Karno (GBK)" />
+          </div>
+
+          <div class="preset-destinations">
+            <span style="font-size: 10px; color: var(--text-muted); width: 100%;">Tujuan Populer:</span>
+            <button class="btn-preset" data-lat="-6.2185" data-lon="106.8025">GBK Senayan</button>
+            <button class="btn-preset" data-lat="-6.1950" data-lon="106.8230">Bundaran HI</button>
+            <button class="btn-preset" data-lat="-6.2440" data-lon="106.7990">Blok M</button>
+            <button class="btn-preset" data-lat="-6.2280" data-lon="106.8290">Kuningan City</button>
+          </div>
+
+          <div class="route-summary-card" id="route-card">
+            <div class="route-stat">
+              <span class="route-stat-val" id="nav-dist">— km</span>
+              <span class="route-stat-lbl">Jarak Total</span>
+            </div>
+            <div class="route-stat">
+              <span class="route-stat-val" style="color: var(--accent-gold);" id="nav-eta">— mnt</span>
+              <span class="route-stat-lbl">Estimasi Tiba</span>
+            </div>
+            <div class="route-stat">
+              <span class="route-stat-val" style="color: var(--accent-green);" id="nav-status">—</span>
+              <span class="route-stat-lbl">Kondisi Jalur</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel">
+        <div class="panel-header">
+          <div class="panel-title"><span>🚦 Indeks Kemacetan (ACI)</span></div>
+          <span style="font-size: 11px; font-weight: 800;" id="aci-val">—</span>
+        </div>
+        <p style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">
+          Kecepatan rerata jaringan: <b style="color: #fff;" id="aci-speed">— km/h</b>.
+          <span id="aci-note" style="display:block; margin-top:4px; color: var(--text-muted);"></span>
+        </p>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="floating-overlay-right">
+      <div class="glass-panel">
+        <div class="panel-header">
+          <div class="panel-title"><span>🗺️ Lapisan Peta</span></div>
+        </div>
+        <div class="layer-toggles">
+          <button class="layer-toggle-btn active" data-layer="vehicles">🚌 Kendaraan</button>
+          <button class="layer-toggle-btn active" data-layer="reports">⚠️ Laporan</button>
+          <button class="layer-toggle-btn active" data-layer="traffic">🚦 Kemacetan</button>
+          <button class="layer-toggle-btn" data-layer="news">📰 Berita</button>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="max-height: 320px; overflow-y: auto;">
+        <div class="panel-header">
+          <div class="panel-title"><span>📢 Laporan Terkini</span></div>
+          <span style="font-size: 10px; background: rgba(239, 68, 68, 0.2); color: var(--accent-red); padding: 2px 6px; border-radius: 4px;" id="reports-count-badge">0 Aktif</span>
+        </div>
+        <div id="quick-reports-feed" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+
+      <div class="glass-panel" style="max-height: 220px; overflow-y: auto;">
+        <div class="panel-header">
+          <div class="panel-title"><span>📰 Berita Untuk Anda</span></div>
+        </div>
+        <div id="quick-news-feed" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+
+    <!-- BOTTOM ACTION BAR -->
+    <div class="floating-bottom-bar">
+      <button class="action-btn-primary" id="btn-open-report-modal"><span>📸 Lapor Kondisi Jalan</span></button>
+      <button class="action-btn-primary" style="background: linear-gradient(135deg, #10b981, #059669);" id="btn-simulate-commute"><span>🚗 Selesai Perjalanan (+XP)</span></button>
+      <button class="action-btn-danger" id="btn-open-sos-modal"><span>🚨 SOS DARURAT</span></button>
+    </div>
+  </main>
+
+  <!-- ============================================================= -->
+  <!-- MODALS -->
+  <!-- ============================================================= -->
+
+  <!-- REPORT MODAL -->
+  <div class="modal-backdrop" id="report-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title"><span>📢 Laporkan Kondisi Jalan</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-create-report" style="display: flex; flex-direction: column; gap: 14px;">
+          <div>
+            <label class="field-label">Kategori Kejadian:</label>
+            <div class="input-group">
+              <select id="report-category" required>
+                <option value="accident">🚨 Kecelakaan Kendaraan</option>
+                <option value="flood">🌊 Banjir / Genangan Air</option>
+                <option value="traffic_jam">🚗 Kemacetan Parah</option>
+                <option value="road_damage">🕳️ Jalan Berlubang / Rusak</option>
+                <option value="road_closure">⛔ Penutupan Jalan</option>
+                <option value="construction">🚧 Perbaikan Jalan</option>
+                <option value="broken_traffic_light">🚦 Lampu Lalu Lintas Padam</option>
+                <option value="vehicle_breakdown">🔧 Kendaraan Mogok</option>
+                <option value="fallen_tree">🌳 Pohon Tumbang</option>
+                <option value="weather_hazard">🌧️ Cuaca Ekstrem / Kabut</option>
+                <option value="other">⚠️ Lainnya</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Judul Singkat:</label>
+            <div class="input-group"><input type="text" id="report-title" placeholder="Contoh: Genangan 30cm di depan Halte" required /></div>
+          </div>
+          <div>
+            <label class="field-label">Nama Ruas Jalan:</label>
+            <div class="input-group"><input type="text" id="report-road" placeholder="Contoh: Jl. Sudirman arah Bundaran HI" required /></div>
+          </div>
+          <div>
+            <label class="field-label">Deskripsi Situasi:</label>
+            <div class="input-group">
+              <textarea id="report-desc" rows="3" class="textarea-clean" placeholder="Jelaskan lajur yang terhambat, saran rute alternatif, dll."></textarea>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Foto Bukti (upload dari perangkat):</label>
+            <div class="input-group"><input type="file" id="report-file" accept="image/png,image/jpeg,image/webp" /></div>
+            <img class="upload-preview" id="report-preview" alt="Pratinjau bukti" />
+          </div>
+          <div style="background: rgba(0, 247, 255, 0.1); border: 1px solid var(--accent-cyan); border-radius: var(--radius-sm); padding: 10px; font-size: 11px; color: var(--text-secondary);">
+            📍 <b>Validasi Geospasial:</b> Koordinat Anda otomatis dilampirkan (<span id="report-current-coords">—</span>).
+            Laporan valid +<b>20 XP</b>, terverifikasi +<b>30 XP</b>. Batas: 1 laporan / 3 menit.
+          </div>
+          <button type="submit" class="action-btn-primary" style="justify-content: center; width: 100%;">
+            <span>🚀 Kirim Laporan</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- VOTE MODAL -->
+  <div class="modal-backdrop" id="vote-modal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>🔍 Verifikasi Komunitas</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body" id="vote-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- GAMIFICATION MODAL -->
+  <div class="modal-backdrop" id="gamification-modal">
+    <div class="modal-content" style="width: 760px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>🏆 Gamifikasi — Rank, Misi & Achievement</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tab-strip">
+          <button class="btn-preset active" data-gm-tab="leaderboard">👑 Leaderboard</button>
+          <button class="btn-preset" data-gm-tab="missions">🎯 Misi</button>
+          <button class="btn-preset" data-gm-tab="achievements">🏅 Achievement</button>
+        </div>
+
+        <section id="gm-panel-leaderboard">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+            <select id="lb-category" class="select-clean">
+              <option value="explorer">Top Explorer (km)</option>
+              <option value="reporter">Top Reporter</option>
+              <option value="contributor">Top Contributor</option>
+              <option value="navigator">Top Navigator</option>
+              <option value="safety">Top Safety Guardian</option>
+              <option value="city_explorer">Top City Explorer</option>
+            </select>
+            <select id="lb-period" class="select-clean">
+              <option value="all">All Time</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <select id="lb-scope" class="select-clean">
+              <option value="global">Global</option>
+              <option value="friends">Friends</option>
+            </select>
+          </div>
+          <div class="leaderboard-list" id="leaderboard-container"></div>
+        </section>
+
+        <section id="gm-panel-missions" style="display:none;">
+          <div id="missions-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        </section>
+
+        <section id="gm-panel-achievements" style="display:none;">
+          <div id="achievements-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- STORE MODAL -->
+  <div class="modal-backdrop" id="store-modal">
+    <div class="modal-content" style="width: 820px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>💎 NEX Store — Kosmetik & Kustomisasi</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <button class="btn-preset active" data-store-cat="all">Semua</button>
+            <button class="btn-preset" data-store-cat="map_skin">Tema Peta</button>
+            <button class="btn-preset" data-store-cat="vehicle_icon">Kendaraan</button>
+            <button class="btn-preset" data-store-cat="title">Gelar</button>
+            <button class="btn-preset" data-store-cat="profile_frame">Frame</button>
+            <button class="btn-preset" data-store-cat="profile_effect">Efek</button>
+          </div>
+          <button class="btn-topup-quick" id="btn-open-topup-from-store">💳 Beli NEX Gems</button>
+        </div>
+        <div class="store-grid" id="store-items-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP-UP MODAL -->
+  <div class="modal-backdrop" id="topup-modal">
+    <div class="modal-content" style="max-width: 460px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>💳 Top-Up NEX Gems</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body" id="topup-body">
+        <div id="topup-packages-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAFETY MODAL -->
+  <div class="modal-backdrop" id="safety-modal">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>🛡️ Safety Center & Emergency SOS</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="sos-trigger-container">
+          <div class="big-sos-button" id="btn-trigger-sos">
+            <span>🚨</span><span style="font-size: 20px;">SOS</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); max-width: 340px;">
+            Tekan SOS untuk menyiarkan koordinat darurat ke kontak terdaftar dan membuat tautan pemantau live 2 jam.
+            Aplikasi juga menyiapkan fallback SMS bila internet terputus.
+          </p>
+        </div>
+
+        <div id="active-sos-list" style="margin-bottom: 12px;"></div>
+
+        <h4 class="section-title" style="color: var(--accent-red);">📞 Panggilan Cepat Darurat</h4>
+        <div class="emergency-directory">
+          <a href="tel:110" class="emergency-dial-btn">👮 Polisi (110)</a>
+          <a href="tel:112" class="emergency-dial-btn">🚨 Darurat Kota (112)</a>
+          <a href="tel:119" class="emergency-dial-btn">🚑 Ambulans (119)</a>
+          <a href="tel:113" class="emergency-dial-btn">🚒 Damkar (113)</a>
+        </div>
+
+        <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+          <h4 class="section-title" style="color: var(--accent-cyan);">🔒 Privasi Lokasi (UU PDP No. 27/2022)</h4>
+          <p style="font-size: 11px; color: var(--text-secondary); line-height: 1.45; margin-bottom: 10px;">
+            Fuzzy Privacy Zone menyamarkan posisi Anda di sekitar rumah/kantor. Ghost Mode menyembunyikan kendaraan Anda dari peta komunitas.
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <div class="input-group">
+              <select id="privacy-mode-select" class="select-clean">
+                <option value="public">Publik</option>
+                <option value="friends_only">Hanya Teman</option>
+                <option value="ghost">Ghost Mode</option>
+              </select>
+            </div>
+            <div class="input-group"><input type="number" id="privacy-radius" placeholder="Radius (m)" value="300" /></div>
+            <div class="input-group"><input type="number" step="0.0001" id="privacy-home-lat" placeholder="Home Latitude" value="-6.2100" /></div>
+            <div class="input-group"><input type="number" step="0.0001" id="privacy-home-lon" placeholder="Home Longitude" value="106.8200" /></div>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-preset" id="btn-save-privacy">Simpan Privasi</button>
+            <button class="btn-preset" id="btn-preview-privacy">Pratinjau Masking</button>
+          </div>
+          <div id="privacy-preview-result" style="font-size: 11px; color: var(--accent-cyan); margin-top: 8px;"></div>
+        </div>
+
+        <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+          <h4 class="section-title">📦 Hak Subjek Data</h4>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-preset" id="btn-export-data">⬇️ Ekspor Data Saya</button>
+            <button class="btn-preset" id="btn-delete-history" style="color: var(--accent-red); border-color: rgba(239,68,68,0.4);">🗑️ Hapus Riwayat Perjalanan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEWS MODAL -->
+  <div class="modal-backdrop" id="news-modal">
+    <div class="modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>📰 Berita Lalu Lintas & Informasi Resmi</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tab-strip">
+          <button class="btn-preset active" data-news-filter="all">Semua</button>
+          <button class="btn-preset" data-news-filter="official">Resmi</button>
+          <button class="btn-preset" data-news-filter="news">Berita</button>
+          <button class="btn-preset" data-news-filter="community">Komunitas</button>
+        </div>
+        <div id="news-list-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE & SOCIAL MODAL -->
+  <div class="modal-backdrop" id="profile-modal">
+    <div class="modal-content" style="max-width: 640px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>👤 Profil & Komunitas</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+          <div class="input-group" style="flex:1;">
+            <input type="text" id="profile-search-input" placeholder="Cari username pengguna NEXMAP..." />
+          </div>
+          <button class="btn-preset" id="btn-profile-search">Cari</button>
+        </div>
+        <div id="profile-search-results"></div>
+        <div id="profile-detail"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP CENTER MODAL -->
+  <div class="modal-backdrop" id="help-modal">
+    <div class="modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>❓ Help Center & Dukungan</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <div class="input-group" style="flex: 1;">
+            <input type="text" id="help-search" placeholder="Cari pertanyaan atau topik..." />
+          </div>
+          <button class="btn-preset" id="btn-help-search">Cari</button>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;" id="help-categories"></div>
+        <div id="faq-list"></div>
+
+        <h4 class="section-title" style="margin-top: 20px;">🎫 Ajukan Tiket Dukungan</h4>
+        <form id="form-support-ticket" style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="input-group">
+            <select id="ticket-category" class="select-clean">
+              <option value="general">Umum</option>
+              <option value="account">Akun</option>
+              <option value="report">Live Report</option>
+              <option value="payment">Pembayaran</option>
+              <option value="safety">Keselamatan</option>
+            </select>
+          </div>
+          <div class="input-group"><input type="text" id="ticket-subject" placeholder="Subjek tiket..." required /></div>
+          <div class="input-group">
+            <textarea id="ticket-message" rows="3" class="textarea-clean" placeholder="Jelaskan kendala Anda..." required></textarea>
+          </div>
+          <button type="submit" class="action-btn-primary" style="justify-content:center;">Kirim Tiket</button>
+        </form>
+        <div id="my-tickets" style="margin-top: 12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN MODAL -->
+  <div class="modal-backdrop" id="admin-modal">
+    <div class="modal-content" style="width: 760px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>⚙️ Super Admin & Moderasi</span></div>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+          <div class="stat-box"><b id="adm-stat-users">—</b><span>Pengguna</span></div>
+          <div class="stat-box"><b id="adm-stat-reports" style="color: var(--accent-gold);">—</b><span>Laporan</span></div>
+          <div class="stat-box"><b id="adm-stat-pending" style="color: var(--accent-red);">—</b><span>Pending</span></div>
+          <div class="stat-box"><b id="adm-stat-tickets" style="color: var(--accent-purple);">—</b><span>Tiket</span></div>
+        </div>
+
+        <h4 class="section-title" style="color: var(--accent-cyan);">📋 Antrean Moderasi Laporan</h4>
+        <div id="adm-pending-reports-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+        <h4 class="section-title" style="color: var(--accent-purple); margin-top: 18px;">🎫 Tiket Dukungan Terbuka</h4>
+        <div id="adm-tickets-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+        <h4 class="section-title" style="color: var(--accent-green); margin-top: 18px;">📢 Siaran Resmi (B2G)</h4>
+        <form id="form-civic-broadcast" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="input-group">
+              <select id="adm-agency" class="select-clean">
+                <option value="Korlantas Polri">Korlantas Polri</option>
+                <option value="Dishub DKI Jakarta">Dishub DKI Jakarta</option>
+                <option value="BMKG">BMKG</option>
+                <option value="BPBD">BPBD</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <select id="adm-severity" class="select-clean">
+                <option value="info">Informasi</option>
+                <option value="warning">Peringatan</option>
+                <option value="emergency">Darurat</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group"><input type="text" id="adm-headline" placeholder="Judul pengumuman resmi..." required /></div>
+          <div class="input-group">
+            <textarea id="adm-details" rows="2" class="textarea-clean" placeholder="Detail instruksi / rekayasa lalu lintas..."></textarea>
+          </div>
+          <button type="submit" class="action-btn-primary" style="justify-content:center;">Siarkan ke Komunitas</button>
+        </form>
+
+        <h4 class="section-title" style="color: var(--text-secondary); margin-top: 18px;">🧾 Audit Log Terakhir</h4>
+        <div id="adm-audit-logs" style="font-size: 11px; color: var(--text-muted); line-height: 1.6;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
