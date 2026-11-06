@@ -1,5 +1,5 @@
 /* NEXMAP Service Worker — offline shell + asset cache */
-const CACHE_NAME = 'nexmap-v1.2';
+const CACHE_NAME = 'nexmap-v1.3';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
