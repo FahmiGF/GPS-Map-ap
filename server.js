@@ -164,6 +164,19 @@ app.get('/api/meta', (req, res) => {
 });
 
 // -------------------------------------------------------------
+// MAP CONFIG (key-free tiles by default)
+// -------------------------------------------------------------
+const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+app.get('/api/config', (req, res) => {
+  res.json({
+    version: '1.2.0',
+    tileUrl: process.env.NEXMAP_TILE_URL || DEFAULT_TILE_URL,
+    usesOpenStreetMap: !process.env.NEXMAP_TILE_URL
+  });
+});
+
+// -------------------------------------------------------------
 // UPLOAD EVIDENCE
 // -------------------------------------------------------------
 app.post('/api/upload', (req, res) => {

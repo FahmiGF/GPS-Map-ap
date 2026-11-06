@@ -505,4 +505,4 @@ Bagian ini mencatat realisasi teknis dari cetak biru di atas pada prototipe berj
 | Autentikasi & Otorisasi | ⏳ Belum | Demo user tunggal `usr-demo-001` |
 | PostGIS / Skala Produksi | ⏳ Belum | SQLite kompatibel; perlu PostgreSQL/PostGIS, MQTT, object storage |
 
-**Verifikasi:** `npm test` (10 unit test) + `npm run smoke` (109 pemeriksaan API) — seluruhnya lulus.
+**Verifikasi:** `npm test` (10 unit test) + `npm run smoke` (110 pemeriksaan API) — seluruhnya lulus.

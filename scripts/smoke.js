@@ -99,6 +99,9 @@ async function run() {
   const meta = await req('GET', '/api/meta');
   check('GET /api/meta has categories', meta.status === 200 && meta.data.categories.length === 11);
 
+  const mapConfig = await req('GET', '/api/config');
+  check('GET /api/config tile URL is key-free', mapConfig.status === 200 && /^https:\/\//.test(mapConfig.data.tileUrl) && !mapConfig.data.tileUrl.includes('cartocdn.com'));
+
   const profile = await req('GET', '/api/user/profile');
   check('GET /api/user/profile', profile.status === 200 && profile.data.username === 'NEX_Rider');
   check('profile has achievements', Array.isArray(profile.data.achievements) && profile.data.achievements.length === 10);

@@ -51,10 +51,38 @@ const CATEGORY_ICONS = {
 };
 
 const MAP_SKIN_TILES = {
-  cyberpunk: { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' },
-  dark_gold: { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png' },
-  synthwave: { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' }
+  cyberpunk: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+  },
+  dark_gold: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+  },
+  synthwave: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+  }
 };
+
+let mapTileConfig = {
+  url: MAP_SKIN_TILES.cyberpunk.url,
+  attribution: MAP_SKIN_TILES.cyberpunk.attribution
+};
+
+async function loadMapConfig() {
+  try {
+    const cfg = await api('/api/config');
+    if (cfg && typeof cfg.tileUrl === 'string' && /^https:\/\//.test(cfg.tileUrl)) {
+      mapTileConfig.url = cfg.tileUrl;
+      mapTileConfig.attribution = cfg.usesOpenStreetMap
+        ? '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+        : '&copy; Peta oleh penyedia tile terkonfigurasi';
+    }
+  } catch (_) {
+    /* keep OpenStreetMap default when config is unavailable */
+  }
+}
 
 // ---------- UTILITIES ----------
 function esc(value) {
@@ -143,6 +171,7 @@ function closeAllModals() {
 function initMap() {
   map = L.map('map-container', { zoomControl: false, attributionControl: false }).setView([DEMO_LAT, DEMO_LON], 13);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
+  L.control.attribution({ position: 'bottomright', prefix: false }).addTo(map);
   setMapSkin(currentActiveSkin);
 }
 
@@ -151,8 +180,15 @@ function setMapSkin(skinKey) {
   if (activeTileLayer) map.removeLayer(activeTileLayer);
   const key = MAP_SKIN_TILES[skinKey] ? skinKey : 'cyberpunk';
   const skin = MAP_SKIN_TILES[key];
+  const tileUrl = mapTileConfig.url || skin.url;
+  const options = {
+    maxZoom: 19,
+    attribution: mapTileConfig.attribution || skin.attribution
+  };
+  // Only pass subdomains when the URL actually uses the {s} placeholder
+  if (tileUrl.includes('{s}')) options.subdomains = 'abc';
 
-  activeTileLayer = L.tileLayer(skin.url, { maxZoom: 19, subdomains: 'abcd' }).addTo(map);
+  activeTileLayer = L.tileLayer(tileUrl, options).addTo(map);
 
   const container = document.getElementById('map-container');
   container.classList.remove('map-skin-cyberpunk', 'map-skin-dark_gold', 'map-skin-synthwave');
@@ -1733,6 +1769,7 @@ function setupUIEventListeners() {
 // BOOTSTRAP
 // =============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  await loadMapConfig();
   initMap();
   initWebSocket();
   setupUIEventListeners();

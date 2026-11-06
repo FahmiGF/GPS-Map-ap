@@ -53,7 +53,7 @@ nexmap/
 │   └── js/
 │       └── app.js                  # Engine client interaktif (Leaflet Map, WS, Modals, State)
 ├── scripts/
-│   ├── smoke.js                    # End-to-end API smoke test (109 pemeriksaan)
+│   ├── smoke.js                    # End-to-end API smoke test (110 pemeriksaan)
 │   └── inspect.js                  # Inspeksi tabel & kolom database
 └── tests/
     └── nexmap.test.js              # Unit & Integration Test Suite komprehensif
@@ -85,6 +85,19 @@ Aplikasi akan aktif di:
 - **Web App & Peta Interaktif:** [http://localhost:3000](http://localhost:3000)
 - **WebSocket Telemetry Stream:** `ws://localhost:3000/v1/stream`
 
+### 4. Konfigurasi Peta (Tile Provider)
+Secara default NEXMAP memakai tile **OpenStreetMap** yang tidak memerlukan API key, lalu diwarnai ulang dengan CSS untuk tema *Cyberpunk*, *Dark Gold*, dan *Synthwave*. Jika ingin memakai penyedia lain (mis. MapTiler, Stadia, atau CARTO dengan key), set variabel lingkungan sebelum `npm start`:
+
+```bash
+# Windows PowerShell
+$env:NEXMAP_TILE_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+# Linux/macOS
+export NEXMAP_TILE_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+```
+
+Gunakan placeholder `{z}`, `{x}`, `{y}`; `{s}` juga didukung bila penyedia memakai subdomain. Jika Anda memakai layanan ber-key, sertakan key langsung pada URL template. Konfigurasi aktif dapat dicek di `GET /api/config`.
+
 ---
 
 ## 🧪 Menjalankan Automated Test Suite
@@ -96,7 +109,7 @@ npm test
 
 Untuk pengujian end-to-end seluruh REST API:
 ```bash
-npm run smoke      # menyalakan server + database sementara sendiri, 109 pemeriksaan API
+npm run smoke      # menyalakan server + database sementara sendiri, 110 pemeriksaan API
 npm run verify     # unit test + smoke test sekaligus
 ```
 
@@ -207,7 +220,7 @@ Hasil pengujian otomatis:
 
 | Grup | Endpoint |
 |------|----------|
-| Meta | `GET /api/health`, `GET /api/meta` |
+| Meta | `GET /api/health`, `GET /api/meta`, `GET /api/config` |
 | Pengguna | `GET /api/user/profile`, `POST /api/user/privacy`, `POST /api/user/privacy/preview`, `GET /api/user/export`, `DELETE /api/user/history` |
 | Notifikasi | `GET /api/notifications`, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`, `DELETE /api/notifications` |
 | Perjalanan | `POST /api/trips/finish`, `GET /api/trips`, `GET /api/trips/stats` |
