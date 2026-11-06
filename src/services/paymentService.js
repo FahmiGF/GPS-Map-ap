@@ -113,6 +113,14 @@ const PaymentService = {
       );
       db.run('UPDATE users SET nex_gems = nex_gems + ? WHERE id = ?', [tx.gems_awarded, tx.user_id]);
 
+      require('./notificationService').notify({
+        userId: tx.user_id,
+        type: 'payment',
+        title: 'Top-Up berhasil',
+        body: `Pembayaran ${orderId} diterima. +${tx.gems_awarded} NEX Gems telah masuk ke dompet Anda.`,
+        link: 'store'
+      });
+
       return { success: true, orderId, gemsAwarded: tx.gems_awarded, status: 'paid' };
     }
 

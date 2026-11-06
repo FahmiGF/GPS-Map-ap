@@ -1,6 +1,6 @@
 # NEXMAP — Open World GPS, Smart Mobility & Civic Gamification Platform
 **Tagline:** *Navigate, Explore, Experience*  
-**Platform Version:** 1.1.0 (Production Blueprint & Live Prototype)
+**Platform Version:** 1.2.0 (Production Blueprint & Live Prototype)
 
 ---
 
@@ -44,12 +44,16 @@ nexmap/
 │       └── civicService.js         # Hub siaran resmi Korlantas/Dishub/BMKG
 ├── public/
 │   ├── index.html                  # Antarmuka Single Page Application (SPA) responsif
+│   ├── manifest.json               # Manifest PWA (installable, theme, ikon)
+│   ├── sw.js                       # Service worker cache offline
+│   ├── offline.html                # Halaman fallback saat offline
 │   ├── css/
-│   │   └── style.css               # Desain Glassmorphism Cyberpunk & Dark-Gold
+│   │   ├── style.css               # Desain Glassmorphism Cyberpunk & Dark-Gold
+│   │   └── features.css            # UI notifikasi, perjalanan, komentar, analitik
 │   └── js/
 │       └── app.js                  # Engine client interaktif (Leaflet Map, WS, Modals, State)
 ├── scripts/
-│   ├── smoke.js                    # End-to-end API smoke test (74 pemeriksaan)
+│   ├── smoke.js                    # End-to-end API smoke test (109 pemeriksaan)
 │   └── inspect.js                  # Inspeksi tabel & kolom database
 └── tests/
     └── nexmap.test.js              # Unit & Integration Test Suite komprehensif
@@ -92,7 +96,7 @@ npm test
 
 Untuk pengujian end-to-end seluruh REST API:
 ```bash
-npm run smoke      # menyalakan server + database sementara sendiri, 74 pemeriksaan API
+npm run smoke      # menyalakan server + database sementara sendiri, 109 pemeriksaan API
 npm run verify     # unit test + smoke test sekaligus
 ```
 
@@ -105,6 +109,11 @@ Hasil pengujian otomatis:
 - ✔️ **Payment Engine:** Pencegahan pemrosesan transaksi ganda (*idempotency key*) dan webhook ledger.
 - ✔️ **Safety Center:** Pemicu SOS darurat, direktori 110/112, dan penyamaran koordinat Fuzzy Privacy UU PDP.
 - ✔️ **Civic Intelligence:** Indeks kemacetan Automated Congestion Index (ACI).
+- ✔️ **Notification Service:** Persistensi, hitungan belum dibaca, tandai baca, dan validasi kepemilikan.
+- ✔️ **Saved Places:** CRUD, validasi koordinat, dan penolakan duplikat.
+- ✔️ **Report Comments:** Anti-spam, kepemilikan komentar, dan moderasi.
+- ✔️ **Trip Service:** Riwayat, agregat statistik, dan seri 7 hari.
+- ✔️ **PWA:** Manifest, service worker, halaman offline, dan ikon dapat diakses.
 
 ---
 
@@ -165,28 +174,60 @@ Hasil pengujian otomatis:
 
 ---
 
+## 🆕 Fitur Baru v1.2
+
+1. **Pusat Notifikasi Real-time**
+   - Lonceng notifikasi di header dengan badge jumlah belum dibaca.
+   - Notifikasi persisten untuk level-up, achievement, misi, pengikut baru, komentar, balasan tiket, pembayaran, moderasi, dan perubahan status laporan.
+   - Dorong langsung lewat WebSocket (`NOTIFICATION`), bisa ditandai dibaca satu per satu atau semua sekaligus.
+2. **Riwayat & Statistik Perjalanan**
+   - Tab **🧾 Perjalanan** menampilkan total km, jam berkendara, rata-rata kecepatan, rasio perjalanan valid/ditolak, XP, dan grafik 7 hari terakhir.
+   - Hanya perjalanan yang lolos anti-cheat yang dihitung untuk statistik dan hadiah.
+3. **Tempat Tersimpan (Favorit)**
+   - Simpan hingga 20 lokasi (Rumah, Kantor, Kampus) dari panel navigasi dan jadikan tujuan dengan satu klik.
+   - Validasi duplikat nama, koordinat, dan batas maksimum.
+4. **Diskusi pada Laporan**
+   - Komentar pada setiap laporan dengan anti-spam (identik dalam 60 detik), moderasi status, dan notifikasi ke penulis laporan.
+   - Komentar baru disiarkan real-time (`REPORT_COMMENT`).
+5. **Manajemen Kontak Darurat**
+   - Tambah/hapus hingga 10 kontak darurat dengan validasi nomor telepon; dipakai oleh alur SOS.
+6. **Analitik & Ekspor Admin**
+   - Ringkasan laporan per kategori/status, tren 7 hari, pendapatan, perjalanan, dan kontributor teratas.
+   - Ekspor CSV untuk laporan, perjalanan, transaksi, dan tiket dengan proteksi formula-injection.
+7. **Progressive Web App (PWA)**
+   - `manifest.json`, service worker dengan cache offline, halaman offline, dan ikon aplikasi.
+   - Aset statis memakai cache-first; navigasi memakai network-first dengan fallback offline.
+8. **Perbaikan Bug & Hardening**
+   - Guard anti-duplikasi laporan (kategori sama dalam 150 m / 15 menit → HTTP 409).
+   - Sanitasi input XP (NaN/negatif), pruning notifikasi per pengguna, heartbeat WebSocket, dan escaping CSV.
+
+---
+
 ## 🔌 Ringkasan REST API
 
 | Grup | Endpoint |
 |------|----------|
 | Meta | `GET /api/health`, `GET /api/meta` |
 | Pengguna | `GET /api/user/profile`, `POST /api/user/privacy`, `POST /api/user/privacy/preview`, `GET /api/user/export`, `DELETE /api/user/history` |
+| Notifikasi | `GET /api/notifications`, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`, `DELETE /api/notifications` |
+| Perjalanan | `POST /api/trips/finish`, `GET /api/trips`, `GET /api/trips/stats` |
+| Tempat Tersimpan | `GET /api/places`, `POST /api/places`, `PATCH /api/places/:id`, `DELETE /api/places/:id` |
 | Kendaraan & Lalu Lintas | `GET /api/vehicles/live`, `GET /api/traffic/segments`, `GET /api/traffic/summary` |
 | Navigasi | `GET /api/navigation/route` |
-| Laporan | `GET /api/reports/active`, `GET /api/reports/:id`, `POST /api/reports`, `POST /api/reports/:id/vote` |
+| Laporan | `GET /api/reports/active`, `GET /api/reports/:id`, `POST /api/reports`, `POST /api/reports/:id/vote`, `GET /api/reports/:id/comments`, `POST /api/reports/:id/comments`, `DELETE /api/reports/comments/:commentId` |
 | Gamifikasi | `POST /api/trips/finish`, `GET /api/gamification/leaderboard`, `GET /api/gamification/missions`, `POST /api/gamification/missions/:id/claim`, `GET /api/gamification/achievements` |
 | Sosial | `GET /api/social/users`, `GET /api/social/profile/:id`, `POST /api/social/follow/:id`, `POST /api/social/unfollow/:id`, `GET /api/social/following`, `GET /api/social/followers` |
 | Berita | `GET /api/news`, `POST /api/news` |
 | Bantuan | `GET /api/help/faqs`, `GET /api/help/tickets`, `POST /api/help/tickets` |
 | Store & Pembayaran | `GET /api/store/items`, `POST /api/store/buy`, `POST /api/store/equip`, `POST /api/store/topup/initiate`, `POST /api/store/topup/webhook`, `POST /api/store/topup/simulate-payment` |
-| Keselamatan | `POST /api/safety/sos/trigger`, `POST /api/safety/sos/resolve`, `GET /api/safety/sos/active` |
+| Keselamatan | `POST /api/safety/sos/trigger`, `POST /api/safety/sos/resolve`, `GET /api/safety/sos/active`, `GET /api/safety/contacts`, `POST /api/safety/contacts`, `DELETE /api/safety/contacts/:id` |
 | Civic | `GET /api/civic/announcements`, `POST /api/civic/announcements` |
-| Admin | `GET /api/admin/overview`, `POST /api/admin/reports/:id/moderate`, `POST /api/admin/tickets/:id/reply`, `GET /api/admin/audit-logs` |
+| Admin | `GET /api/admin/overview`, `GET /api/admin/analytics`, `GET /api/admin/export/:type`, `POST /api/admin/reports/:id/moderate`, `POST /api/admin/tickets/:id/reply`, `GET /api/admin/audit-logs` |
 | Upload | `POST /api/upload` |
 | WebSocket | `ws://localhost:3000/v1/stream` |
 
 ### Channel WebSocket
-`INIT_STATE`, `VEHICLES_TELEMETRY`, `TRAFFIC_TELEMETRY`, `NEW_REPORT`, `REPORT_UPDATED`, `REPORTS_EXPIRED`, `USER_UPDATED`, `SOS_ALERT`, `CIVIC_ANNOUNCEMENT`, `TRAFFIC_NEWS`.
+`INIT_STATE`, `VEHICLES_TELEMETRY`, `TRAFFIC_TELEMETRY`, `NEW_REPORT`, `REPORT_UPDATED`, `REPORTS_EXPIRED`, `USER_UPDATED`, `SOS_ALERT`, `CIVIC_ANNOUNCEMENT`, `TRAFFIC_NEWS`, `NOTIFICATION`, `REPORT_COMMENT`.
 
 ---
 

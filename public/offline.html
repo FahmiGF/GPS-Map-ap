@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NEXMAP — Offline</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: radial-gradient(circle at 50% 20%, #12203a, #0a0e17 65%);
+      color: #e2e8f0; font-family: Inter, system-ui, sans-serif; padding: 24px;
+    }
+    .card {
+      max-width: 420px; text-align: center; padding: 32px 26px;
+      background: rgba(15, 23, 42, 0.82); border: 1px solid rgba(0, 247, 255, 0.22);
+      border-radius: 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    }
+    .logo { font-size: 15px; letter-spacing: 3px; font-weight: 900; color: #00f7ff; }
+    .icon { font-size: 46px; margin: 18px 0 8px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { font-size: 13px; line-height: 1.65; color: #94a3b8; margin: 0 0 20px; }
+    button {
+      background: linear-gradient(135deg, #00f7ff, #2563eb); border: none; color: #04121d;
+      font-weight: 800; font-size: 13px; padding: 11px 22px; border-radius: 10px; cursor: pointer;
+    }
+    .hint { margin-top: 16px; font-size: 11px; color: #475569; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="logo">⚡ NEXMAP</div>
+    <div class="icon">📡</div>
+    <h1>Anda sedang offline</h1>
+    <p>
+      Koneksi internet tidak tersedia. Anda masih dapat membuka peta yang sudah di-cache,
+      namun laporan komunitas, lalu lintas langsung, dan telemetri akan diperbarui setelah
+      koneksi kembali.
+    </p>
+    <button onclick="location.reload()">Coba Sambungkan Ulang</button>
+    <div class="hint">Darurat? Tetap hubungi 112 / 110 melalui aplikasi telepon.</div>
+  </main>
+</body>
+</html>

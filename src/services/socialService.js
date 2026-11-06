@@ -19,6 +19,16 @@ const SocialService = {
       'INSERT INTO follows (id, follower_id, following_id, created_at) VALUES (?, ?, ?, ?)',
       [`flw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, followerId, followingId, Date.now()]
     );
+
+    const follower = db.get('SELECT username FROM users WHERE id = ?', [followerId]);
+    require('./notificationService').notify({
+      userId: followingId,
+      type: 'follow',
+      title: 'Pengikut baru',
+      body: `${follower ? follower.username : 'Seorang pengguna'} mulai mengikuti Anda.`,
+      link: 'profile'
+    });
+
     return { success: true, alreadyFollowing: false };
   },
 

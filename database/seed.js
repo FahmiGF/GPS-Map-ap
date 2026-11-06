@@ -396,9 +396,9 @@ function seedDatabase() {
 
   // 7. Seed Emergency Contacts for Demo User
   db.run(
-    `INSERT OR REPLACE INTO emergency_contacts (id, user_id, name, phone, relationship)
-     VALUES (?, ?, ?, ?, ?)`,
-    ['emg-001', 'usr-demo-001', 'Keluarga Rumah', '+6281299990001', 'Keluarga Inti']
+    `INSERT OR REPLACE INTO emergency_contacts (id, user_id, name, phone, relationship, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    ['emg-001', 'usr-demo-001', 'Keluarga Rumah', '+6281299990001', 'Keluarga Inti', now]
   );
 
   // 8. Achievements
@@ -501,7 +501,10 @@ function seedDatabase() {
     { id: 'trip-seed-2', user: 'usr-top-001', dist: 18.2, mins: 35, max: 55, hoursAgo: 50 },
     { id: 'trip-seed-3', user: 'usr-top-002', dist: 22.1, mins: 40, max: 58, hoursAgo: 10 },
     { id: 'trip-seed-4', user: 'usr-top-003', dist: 9.8, mins: 30, max: 28, hoursAgo: 40 },
-    { id: 'trip-seed-5', user: 'usr-demo-001', dist: 6.8, mins: 18, max: 48, hoursAgo: 26 }
+    { id: 'trip-seed-5', user: 'usr-demo-001', dist: 6.8, mins: 18, max: 48, hoursAgo: 26 },
+    { id: 'trip-seed-6', user: 'usr-demo-001', dist: 4.2, mins: 12, max: 41, hoursAgo: 3 },
+    { id: 'trip-seed-7', user: 'usr-demo-001', dist: 11.5, mins: 28, max: 52, hoursAgo: 8 },
+    { id: 'trip-seed-8', user: 'usr-demo-001', dist: 7.4, mins: 20, max: 44, hoursAgo: 60 }
   ];
   for (const t of trips) {
     db.run(
@@ -592,6 +595,51 @@ function seedDatabase() {
 
   // 19. Ensure traffic segments exist
   require('../src/services/trafficService').seedSegments();
+
+  // 20. Notifications
+  const notifications = [
+    { id: 'ntf-seed-1', type: 'achievement', title: 'Achievement terbuka: First Journey', body: 'Menyelesaikan perjalanan valid pertama. (+20 NEX Coins)', link: 'gamification', read: 0, hoursAgo: 2 },
+    { id: 'ntf-seed-2', type: 'follow', title: 'Pengikut baru', body: 'RoadMaster_ID mulai mengikuti Anda.', link: 'profile', read: 0, hoursAgo: 5 },
+    { id: 'ntf-seed-3', type: 'comment', title: 'Komentar baru pada laporan Anda', body: 'UrbanRider_JKT: Petugas sudah datang, terima kasih infonya.', link: 'report:rep-004', read: 0, hoursAgo: 7 },
+    { id: 'ntf-seed-4', type: 'payment', title: 'Top-Up berhasil', body: 'Pembayaran diterima. +260 NEX Gems telah masuk ke dompet Anda.', link: 'store', read: 1, hoursAgo: 30 },
+    { id: 'ntf-seed-5', type: 'mission', title: 'Misi selesai: Komuter Harian', body: 'Hadiah +70 XP dan +40 NEX Coins telah ditambahkan.', link: 'gamification', read: 1, hoursAgo: 48 }
+  ];
+  for (const n of notifications) {
+    db.run(
+      `INSERT OR REPLACE INTO notifications (id, user_id, type, title, body, link, is_read, created_at)
+       VALUES (?, 'usr-demo-001', ?, ?, ?, ?, ?, ?)`,
+      [n.id, n.type, n.title, n.body, n.link, n.read, now - n.hoursAgo * oneHour]
+    );
+  }
+
+  // 21. Saved places
+  const places = [
+    { id: 'place-seed-1', label: 'Rumah', address: 'Kebayoran Baru, Jakarta Selatan', lat: -6.2100, lon: 106.8200, icon: '🏠' },
+    { id: 'place-seed-2', label: 'Kantor', address: 'Jl. Jend. Sudirman, Jakarta Pusat', lat: -6.2088, lon: 106.8229, icon: '🏢' },
+    { id: 'place-seed-3', label: 'GBK Senayan', address: 'Gelora Bung Karno, Jakarta Pusat', lat: -6.2185, lon: 106.8025, icon: '🏟️' }
+  ];
+  for (const p of places) {
+    db.run(
+      `INSERT OR REPLACE INTO saved_places (id, user_id, label, address, lat, lon, icon, created_at)
+       VALUES (?, 'usr-demo-001', ?, ?, ?, ?, ?, ?)`,
+      [p.id, p.label, p.address, p.lat, p.lon, p.icon, now - 10 * oneDay]
+    );
+  }
+
+  // 22. Report comments
+  const comments = [
+    { id: 'cmt-seed-1', report: 'rep-001', user: 'usr-top-002', name: 'UrbanRider_JKT', body: 'Konfirmasi, masih padat merayap arah selatan. Alternatif lewat Rasuna lebih lancar.', hoursAgo: 20 },
+    { id: 'cmt-seed-2', report: 'rep-001', user: 'usr-demo-001', name: 'NEX_Rider', body: 'Terima kasih infonya, saya ambil jalur alternatif.', hoursAgo: 18 },
+    { id: 'cmt-seed-3', report: 'rep-002', user: 'usr-top-001', name: 'RoadMaster_ID', body: 'Genangan mulai surut, lajur kiri sudah bisa dilalui motor.', hoursAgo: 1 },
+    { id: 'cmt-seed-4', report: 'rep-004', user: 'usr-top-002', name: 'UrbanRider_JKT', body: 'Petugas sudah datang, terima kasih infonya.', hoursAgo: 7 }
+  ];
+  for (const c of comments) {
+    db.run(
+      `INSERT OR REPLACE INTO report_comments (id, report_id, user_id, author_name, body, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 'visible', ?)`,
+      [c.id, c.report, c.user, c.name, c.body, now - c.hoursAgo * oneHour]
+    );
+  }
 
   console.log('NEXMAP database successfully initialized and seeded!');
 }

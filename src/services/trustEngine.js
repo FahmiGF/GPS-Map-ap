@@ -68,6 +68,7 @@ const TrustEngine = {
 
     const totalScore = Math.max(0, Number((baseScore + voteImpact).toFixed(2)));
 
+    const previousStatus = report.status;
     let newStatus = report.status;
     const now = Date.now();
 
@@ -91,6 +92,38 @@ const TrustEngine = {
        WHERE id = ?`,
       [totalScore, confirmations, denials, newStatus, reportId]
     );
+
+    // Notify the author when the lifecycle status meaningfully changes
+    if (newStatus !== previousStatus && report.user_id) {
+      const messages = {
+        verified: {
+          title: 'Laporan Anda terverifikasi komunitas!',
+          body: `"${report.title}" kini berstatus terverifikasi. Terima kasih telah membantu pengguna lain.`
+        },
+        rejected: {
+          title: 'Laporan Anda ditolak komunitas',
+          body: `"${report.title}" mendapat cukup sanggahan. Jaga akurasi laporan agar reputasi Anda tetap baik.`
+        },
+        resolved: {
+          title: 'Laporan Anda ditandai selesai',
+          body: `"${report.title}" sudah tidak aktif lagi.`
+        }
+      };
+      const msg = messages[newStatus];
+      if (msg) {
+        try {
+          require('./notificationService').notify({
+            userId: report.user_id,
+            type: `report_${newStatus}`,
+            title: msg.title,
+            body: msg.body,
+            link: `report:${reportId}`
+          });
+        } catch (_) {
+          /* notifications must never break voting */
+        }
+      }
+    }
 
     return {
       reportId,

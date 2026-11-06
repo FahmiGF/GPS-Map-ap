@@ -9,6 +9,10 @@ const TrustEngine = require('../src/services/trustEngine');
 const PaymentService = require('../src/services/paymentService');
 const SafetyService = require('../src/services/safetyService');
 const CivicService = require('../src/services/civicService');
+const NotificationService = require('../src/services/notificationService');
+const PlaceService = require('../src/services/placeService');
+const CommentService = require('../src/services/commentService');
+const TripService = require('../src/services/tripService');
 
 test.before(() => {
   seedDatabase();
@@ -202,4 +206,101 @@ test('6. Civic Intelligence: Congestion Index (ACI)', () => {
   // Heavy Gridlock: 8 km/h on 60 km/h road (ACI = 0.13 -> Macet Total)
   const gridlock = CivicService.calculateAci(8, 60);
   assert.equal(gridlock.label, 'Macet Total (Gridlock)');
+});
+
+test('7. Notification Service: Persistence, Unread Counts, Mark Read', () => {
+  const before = NotificationService.unreadCount('usr-demo-001');
+  const created = NotificationService.notify({
+    userId: 'usr-demo-001',
+    type: 'test',
+    title: 'Notifikasi Uji',
+    body: 'Isi notifikasi uji'
+  });
+
+  assert.ok(created.id.startsWith('ntf-'));
+  assert.equal(created.is_read, 0);
+  assert.equal(NotificationService.unreadCount('usr-demo-001'), before + 1);
+
+  const list = NotificationService.list('usr-demo-001', { unreadOnly: true, limit: 100 });
+  assert.ok(list.every(n => n.is_read === 0));
+  assert.ok(list.some(n => n.id === created.id));
+
+  const read = NotificationService.markRead('usr-demo-001', created.id);
+  assert.equal(read.success, true);
+  assert.equal(read.unreadCount, before);
+
+  assert.equal(NotificationService.markAllRead('usr-demo-001').unreadCount, 0);
+  assert.throws(
+    () => NotificationService.markRead('usr-demo-001', 'ntf-tidak-ada'),
+    /tidak ditemukan/i
+  );
+});
+
+test('8. Saved Places: CRUD, Validation and Duplicate Guard', () => {
+  const label = `Lokasi Uji ${Date.now()}`;
+  const place = PlaceService.create('usr-demo-001', {
+    label,
+    address: 'Jl. Uji',
+    lat: -6.2,
+    lon: 106.8,
+    icon: '🧪'
+  });
+
+  assert.ok(place.id.startsWith('place-'));
+  assert.ok(PlaceService.list('usr-demo-001').some(p => p.id === place.id));
+
+  assert.throws(
+    () => PlaceService.create('usr-demo-001', { label, lat: -6.2, lon: 106.8 }),
+    /sudah tersimpan/i
+  );
+  assert.throws(
+    () => PlaceService.create('usr-demo-001', { label: 'X', lat: 999, lon: 0 }),
+    /minimal 2 karakter|tidak valid/i
+  );
+
+  const updated = PlaceService.update('usr-demo-001', place.id, { label: `${label} Edit` });
+  assert.equal(updated.label, `${label} Edit`);
+
+  const removed = PlaceService.remove('usr-demo-001', place.id);
+  assert.equal(removed.success, true);
+  assert.throws(() => PlaceService.remove('usr-demo-001', place.id), /tidak ditemukan/i);
+});
+
+test('9. Report Comments: Threading, Anti-Spam and Ownership', () => {
+  const reportId = 'rep-test-01';
+  const body = `Komentar uji ${Date.now()}`;
+  const comment = CommentService.add({ reportId, userId: 'usr-demo-001', body });
+
+  assert.ok(comment.id.startsWith('cmt-'));
+  assert.equal(comment.author_name, 'NEX_Rider');
+  assert.ok(CommentService.count(reportId) >= 1);
+  assert.ok(CommentService.list(reportId).some(c => c.id === comment.id));
+
+  assert.throws(
+    () => CommentService.add({ reportId, userId: 'usr-demo-001', body }),
+    /baru saja dikirim/i
+  );
+  assert.throws(
+    () => CommentService.add({ reportId, userId: 'usr-demo-001', body: 'x' }),
+    /minimal 3 karakter/i
+  );
+  assert.throws(
+    () => CommentService.remove(comment.id, 'usr-top-002', false),
+    /hanya dapat menghapus/i
+  );
+
+  assert.equal(CommentService.remove(comment.id, 'usr-top-002', true).success, true);
+  assert.ok(!CommentService.list(reportId).some(c => c.id === comment.id));
+});
+
+test('10. Trip Service: History and Aggregate Statistics', () => {
+  const history = TripService.history('usr-demo-001', 10);
+  assert.ok(history.length >= 1);
+  assert.ok(history.every(t => Array.isArray(t.anti_cheat_flags)));
+
+  const stats = TripService.stats('usr-demo-001');
+  assert.ok(stats.total_trips >= history.length);
+  assert.ok(stats.total_km >= 0);
+  assert.equal(stats.last_7_days.length, 7);
+  assert.ok(stats.last_7_days.every(d => typeof d.km === 'number'));
 });

@@ -19,6 +19,10 @@ const SocialService = require('./src/services/socialService');
 const SupportService = require('./src/services/supportService');
 const NewsService = require('./src/services/newsService');
 const TrafficService = require('./src/services/trafficService');
+const NotificationService = require('./src/services/notificationService');
+const TripService = require('./src/services/tripService');
+const PlaceService = require('./src/services/placeService');
+const CommentService = require('./src/services/commentService');
 
 const app = express();
 const server = http.createServer(app);
@@ -84,8 +88,22 @@ function broadcast(type, payload) {
   }
 }
 
+// Push notifications to connected clients in real time
+NotificationService.setBroadcaster(notification => broadcast('NOTIFICATION', notification));
+
 function getUser(userId = DEFAULT_USER_ID) {
   return db.get('SELECT * FROM users WHERE id = ?', [userId]);
+}
+
+/**
+ * CSV cell escaping with formula-injection protection (OWASP).
+ */
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  let str = String(value);
+  if (/^[=+\-@]/.test(str)) str = "'" + str;
+  if (/[",\r\n]/.test(str)) str = `"${str.replace(/"/g, '""')}"`;
+  return str;
 }
 
 function enrichUser(user) {
@@ -114,6 +132,7 @@ function enrichUser(user) {
     nextLevelXp,
     progressPercent,
     inventory,
+    unreadNotifications: NotificationService.unreadCount(user.id),
     achievements: AchievementService.getUserAchievements(user.id)
   };
 }
@@ -129,7 +148,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'nexmap-core',
-    version: '1.1.0',
+    version: '1.2.0',
     time: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime())
   });
@@ -225,7 +244,10 @@ app.get('/api/user/export', (req, res) => {
     reports: db.all('SELECT * FROM live_reports WHERE user_id = ?', [DEFAULT_USER_ID]),
     votes: db.all('SELECT * FROM report_votes WHERE user_id = ?', [DEFAULT_USER_ID]),
     transactions: db.all('SELECT * FROM topup_transactions WHERE user_id = ?', [DEFAULT_USER_ID]),
-    tickets: SupportService.getUserTickets(DEFAULT_USER_ID)
+    tickets: SupportService.getUserTickets(DEFAULT_USER_ID),
+    savedPlaces: PlaceService.list(DEFAULT_USER_ID),
+    comments: db.all('SELECT * FROM report_comments WHERE user_id = ?', [DEFAULT_USER_ID]),
+    notifications: NotificationService.list(DEFAULT_USER_ID, { limit: 200 })
   };
   audit('pdp.data_export', DEFAULT_USER_ID);
   res.setHeader('Content-Disposition', 'attachment; filename="nexmap-data-export.json"');
@@ -233,10 +255,45 @@ app.get('/api/user/export', (req, res) => {
 });
 
 app.delete('/api/user/history', (req, res) => {
+  const tripsDeleted = db.get('SELECT COUNT(*) AS c FROM trips WHERE user_id = ?', [DEFAULT_USER_ID]).c;
+  const votesDeleted = db.get('SELECT COUNT(*) AS c FROM report_votes WHERE user_id = ?', [DEFAULT_USER_ID]).c;
   db.run('DELETE FROM trips WHERE user_id = ?', [DEFAULT_USER_ID]);
   db.run('DELETE FROM report_votes WHERE user_id = ?', [DEFAULT_USER_ID]);
-  audit('pdp.trip_history_erased', DEFAULT_USER_ID);
-  res.json({ success: true, message: 'Riwayat perjalanan dan voting telah dihapus permanen' });
+  audit('pdp.trip_history_erased', DEFAULT_USER_ID, `trips=${tripsDeleted}, votes=${votesDeleted}`);
+  res.json({
+    success: true,
+    deleted: { trips: tripsDeleted, votes: votesDeleted },
+    message: 'Riwayat perjalanan dan voting telah dihapus permanen'
+  });
+});
+
+// -------------------------------------------------------------
+// NOTIFICATIONS
+// -------------------------------------------------------------
+app.get('/api/notifications', (req, res) => {
+  const unreadOnly = req.query.unread === '1' || req.query.unread === 'true';
+  const limit = Math.min(200, parseInt(req.query.limit) || 50);
+  res.json({
+    unreadCount: NotificationService.unreadCount(DEFAULT_USER_ID),
+    notifications: NotificationService.list(DEFAULT_USER_ID, { unreadOnly, limit })
+  });
+});
+
+app.post('/api/notifications/:id/read', (req, res) => {
+  try {
+    res.json(NotificationService.markRead(DEFAULT_USER_ID, req.params.id));
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post('/api/notifications/read-all', (req, res) => {
+  res.json(NotificationService.markAllRead(DEFAULT_USER_ID));
+});
+
+app.delete('/api/notifications', (req, res) => {
+  audit('notification.clear', DEFAULT_USER_ID);
+  res.json(NotificationService.clear(DEFAULT_USER_ID));
 });
 
 // -------------------------------------------------------------
@@ -266,6 +323,43 @@ app.get('/api/navigation/route', (req, res) => {
 });
 
 // -------------------------------------------------------------
+// SAVED PLACES
+// -------------------------------------------------------------
+app.get('/api/places', (req, res) => {
+  res.json(PlaceService.list(DEFAULT_USER_ID));
+});
+
+app.post('/api/places', (req, res) => {
+  try {
+    const place = PlaceService.create(DEFAULT_USER_ID, req.body);
+    audit('place.create', place.id, place.label);
+    res.status(201).json(place);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/places/:id', (req, res) => {
+  try {
+    const place = PlaceService.update(DEFAULT_USER_ID, req.params.id, req.body);
+    audit('place.update', place.id, place.label);
+    res.json(place);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/places/:id', (req, res) => {
+  try {
+    const result = PlaceService.remove(DEFAULT_USER_ID, req.params.id);
+    audit('place.remove', req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // LIVE REPORTS
 // -------------------------------------------------------------
 app.get('/api/reports/active', (req, res) => {
@@ -286,7 +380,7 @@ app.get('/api/reports/:id', (req, res) => {
   const votes = db.all('SELECT vote_type, COUNT(*) AS count FROM report_votes WHERE report_id = ? GROUP BY vote_type', [
     req.params.id
   ]);
-  res.json({ ...report, votes });
+  res.json({ ...report, votes, commentCount: CommentService.count(req.params.id) });
 });
 
 app.post('/api/reports', (req, res) => {
@@ -306,6 +400,20 @@ app.post('/api/reports', (req, res) => {
     const fLon = parseFloat(lon);
     if (!Number.isFinite(fLat) || !Number.isFinite(fLon) || Math.abs(fLat) > 90 || Math.abs(fLon) > 180) {
       return res.status(400).json({ error: 'Koordinat GPS tidak valid' });
+    }
+
+    // Anti-duplication: same category within 150 m in the last 15 minutes
+    const nearby = db.all(
+      `SELECT id, title, lat, lon, created_at FROM live_reports
+       WHERE category = ? AND status IN ('pending', 'active', 'verified') AND created_at > ?`,
+      [category, Date.now() - 15 * 60 * 1000]
+    );
+    const duplicate = nearby.find(r => db.haversineDistanceMeters(fLat, fLon, r.lat, r.lon) <= 150);
+    if (duplicate) {
+      return res.status(409).json({
+        error: 'Laporan serupa sudah ada di sekitar lokasi ini. Verifikasi laporan tersebut alih-alih membuat yang baru.',
+        existingReportId: duplicate.id
+      });
     }
 
     const user = getUser();
@@ -388,6 +496,39 @@ app.post('/api/reports/:id/vote', (req, res) => {
   }
 });
 
+app.get('/api/reports/:id/comments', (req, res) => {
+  res.json(CommentService.list(req.params.id, req.query.limit));
+});
+
+app.post('/api/reports/:id/comments', (req, res) => {
+  try {
+    if (!rateLimit(`comment:${DEFAULT_USER_ID}`, 10, 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak komentar, coba lagi sebentar' });
+    }
+    const comment = CommentService.add({
+      reportId: req.params.id,
+      userId: DEFAULT_USER_ID,
+      body: req.body.body
+    });
+    audit('comment.create', comment.id, `report=${req.params.id}`);
+    broadcast('REPORT_COMMENT', comment);
+    res.status(201).json(comment);
+  } catch (err) {
+    const code = /tidak ditemukan/i.test(err.message) ? 404 : 400;
+    res.status(code).json({ error: err.message });
+  }
+});
+
+app.delete('/api/reports/comments/:commentId', (req, res) => {
+  try {
+    const result = CommentService.remove(req.params.commentId, DEFAULT_USER_ID, false);
+    audit('comment.remove', req.params.commentId);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // -------------------------------------------------------------
 // GAMIFICATION: TRIPS, LEADERBOARDS, MISSIONS, ACHIEVEMENTS
 // -------------------------------------------------------------
@@ -408,6 +549,14 @@ app.post('/api/trips/finish', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/api/trips', (req, res) => {
+  res.json(TripService.history(DEFAULT_USER_ID, req.query.limit));
+});
+
+app.get('/api/trips/stats', (req, res) => {
+  res.json(TripService.stats(DEFAULT_USER_ID));
 });
 
 app.get('/api/gamification/leaderboard', (req, res) => {
@@ -631,6 +780,54 @@ app.get('/api/safety/sos/active', (req, res) => {
   res.json(SafetyService.getActiveSos(DEFAULT_USER_ID));
 });
 
+// Emergency contacts CRUD (used by SOS dispatch)
+app.get('/api/safety/contacts', (req, res) => {
+  res.json(db.all(
+    'SELECT * FROM emergency_contacts WHERE user_id = ? ORDER BY created_at DESC, name',
+    [DEFAULT_USER_ID]
+  ));
+});
+
+app.post('/api/safety/contacts', (req, res) => {
+  try {
+    const { name, phone, relationship } = req.body;
+    if (!name || String(name).trim().length < 2) {
+      return res.status(400).json({ error: 'Nama kontak minimal 2 karakter' });
+    }
+    if (!phone || !/^\+?[0-9][0-9\s-]{5,19}$/.test(String(phone).trim())) {
+      return res.status(400).json({ error: 'Nomor telepon tidak valid' });
+    }
+    const count = db.get(
+      'SELECT COUNT(*) AS c FROM emergency_contacts WHERE user_id = ?',
+      [DEFAULT_USER_ID]
+    ).c;
+    if (count >= 10) {
+      return res.status(400).json({ error: 'Maksimal 10 kontak darurat' });
+    }
+    const id = `emg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    db.run(
+      `INSERT INTO emergency_contacts (id, user_id, name, phone, relationship, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, DEFAULT_USER_ID, String(name).trim(), String(phone).trim(), relationship || 'Kontak Darurat', Date.now()]
+    );
+    audit('safety.contact_create', id, name);
+    res.status(201).json(db.get('SELECT * FROM emergency_contacts WHERE id = ?', [id]));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/safety/contacts/:id', (req, res) => {
+  const contact = db.get('SELECT * FROM emergency_contacts WHERE id = ? AND user_id = ?', [
+    req.params.id,
+    DEFAULT_USER_ID
+  ]);
+  if (!contact) return res.status(404).json({ error: 'Kontak tidak ditemukan' });
+  db.run('DELETE FROM emergency_contacts WHERE id = ?', [req.params.id]);
+  audit('safety.contact_remove', req.params.id, contact.name);
+  res.json({ success: true, contactId: req.params.id });
+});
+
 // -------------------------------------------------------------
 // CIVIC ANNOUNCEMENTS
 // -------------------------------------------------------------
@@ -684,6 +881,16 @@ app.post('/api/admin/reports/:id/moderate', (req, res) => {
   const updated = db.get('SELECT * FROM live_reports WHERE id = ?', [req.params.id]);
   if (!updated) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
 
+  if (updated.user_id) {
+    NotificationService.notify({
+      userId: updated.user_id,
+      type: 'moderation',
+      title: `Laporan ${status} oleh moderator`,
+      body: `"${updated.title}" telah ditinjau oleh tim moderasi NEXMAP.`,
+      link: `report:${updated.id}`
+    });
+  }
+
   audit('admin.report_moderate', req.params.id, status, 'admin');
   broadcast('REPORT_UPDATED', updated);
   res.json({ success: true, report: updated });
@@ -705,9 +912,107 @@ app.get('/api/admin/audit-logs', (req, res) => {
 });
 
 // -------------------------------------------------------------
+// ADMIN ANALYTICS & CSV EXPORT
+// -------------------------------------------------------------
+app.get('/api/admin/analytics', (req, res) => {
+  const byCategory = db.all(
+    'SELECT category, COUNT(*) AS count FROM live_reports GROUP BY category ORDER BY count DESC'
+  );
+  const byStatus = db.all(
+    'SELECT status, COUNT(*) AS count FROM live_reports GROUP BY status ORDER BY count DESC'
+  );
+
+  const last7Days = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const start = d.getTime();
+    const end = start + 24 * 3600 * 1000;
+    const row = db.get(
+      'SELECT COUNT(*) AS reports FROM live_reports WHERE created_at >= ? AND created_at < ?',
+      [start, end]
+    );
+    last7Days.push({ date: d.toISOString().slice(0, 10), reports: row.reports });
+  }
+
+  const revenue = db.get(
+    "SELECT COALESCE(SUM(amount_idr), 0) AS idr, COUNT(*) AS paid FROM topup_transactions WHERE payment_status = 'paid'"
+  );
+  const tripSummary = db.get(
+    `SELECT COUNT(*) AS trips,
+            COALESCE(SUM(CASE WHEN is_valid = 1 THEN distance_km ELSE 0 END), 0) AS km,
+            COALESCE(SUM(CASE WHEN is_valid = 0 THEN 1 ELSE 0 END), 0) AS rejected
+     FROM trips`
+  );
+  const topContributors = db.all(
+    `SELECT u.username, u.total_reports, u.total_km, u.reputation_score
+     FROM users u ORDER BY u.total_reports DESC, u.reputation_score DESC LIMIT 5`
+  );
+
+  res.json({
+    reportsByCategory: byCategory,
+    reportsByStatus: byStatus,
+    reportsLast7Days: last7Days,
+    revenueIdr: revenue.idr,
+    paidTransactions: revenue.paid,
+    trips: {
+      total: tripSummary.trips,
+      km: Math.round(tripSummary.km * 10) / 10,
+      rejected: tripSummary.rejected
+    },
+    topContributors
+  });
+});
+
+app.get('/api/admin/export/:type', (req, res) => {
+  const type = req.params.type;
+  const datasets = {
+    reports: {
+      filename: 'nexmap-reports.csv',
+      rows: db.all('SELECT * FROM live_reports ORDER BY created_at DESC'),
+      columns: ['id', 'author_name', 'category', 'title', 'road_name', 'status', 'confidence_score', 'confirmations', 'denials', 'lat', 'lon', 'created_at']
+    },
+    trips: {
+      filename: 'nexmap-trips.csv',
+      rows: db.all('SELECT * FROM trips ORDER BY created_at DESC'),
+      columns: ['id', 'user_id', 'vehicle_type', 'distance_km', 'duration_mins', 'avg_speed_kmh', 'max_speed_kmh', 'earned_xp', 'is_valid', 'created_at']
+    },
+    transactions: {
+      filename: 'nexmap-transactions.csv',
+      rows: db.all('SELECT * FROM topup_transactions ORDER BY created_at DESC'),
+      columns: ['order_id', 'user_id', 'amount_idr', 'gems_awarded', 'payment_method', 'payment_status', 'paid_at', 'created_at']
+    },
+    tickets: {
+      filename: 'nexmap-tickets.csv',
+      rows: db.all('SELECT * FROM support_tickets ORDER BY created_at DESC'),
+      columns: ['id', 'user_id', 'category', 'subject', 'status', 'created_at', 'updated_at']
+    }
+  };
+
+  const dataset = datasets[type];
+  if (!dataset) return res.status(404).json({ error: 'Jenis ekspor tidak ditemukan' });
+
+  const header = dataset.columns.join(',');
+  const lines = dataset.rows.map(row =>
+    dataset.columns.map(col => csvEscape(row[col])).join(',')
+  );
+  const csv = '\uFEFF' + [header, ...lines].join('\r\n');
+
+  audit('admin.export', type, `${dataset.rows.length} rows`, 'admin');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${dataset.filename}"`);
+  res.send(csv);
+});
+
+// -------------------------------------------------------------
 // WEBSOCKET TELEMETRY
 // -------------------------------------------------------------
 wss.on('connection', ws => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+
   ws.send(
     JSON.stringify({
       type: 'INIT_STATE',
@@ -718,11 +1023,26 @@ wss.on('connection', ws => {
           [Date.now()]
         ),
         traffic: TrafficService.getSegments(),
+        notifications: NotificationService.list(DEFAULT_USER_ID, { limit: 20 }),
         user: enrichUser(getUser())
       }
     })
   );
 });
+
+// Heartbeat: drop half-open connections so broadcasts do not leak
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    try { ws.ping(); } catch (_) {}
+  }
+}, 30000);
+
+wss.on('close', () => clearInterval(heartbeat));
 
 let trafficTickCount = 0;
 setInterval(() => {

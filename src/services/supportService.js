@@ -55,6 +55,15 @@ const SupportService = {
       'UPDATE support_tickets SET admin_reply = ?, status = ?, updated_at = ? WHERE id = ?',
       [reply, status, Date.now(), ticketId]
     );
+
+    require('./notificationService').notify({
+      userId: ticket.user_id,
+      type: 'ticket',
+      title: 'Balasan tiket dukungan',
+      body: `Tiket "${ticket.subject}" telah dijawab: ${String(reply).slice(0, 140)}`,
+      link: 'help'
+    });
+
     return db.get('SELECT * FROM support_tickets WHERE id = ?', [ticketId]);
   }
 };

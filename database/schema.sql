@@ -144,5 +144,6 @@ CREATE TABLE IF NOT EXISTS emergency_contacts (
     user_id TEXT NOT NULL,
     name TEXT NOT NULL,
     phone TEXT NOT NULL,
-    relationship TEXT
+    relationship TEXT,
+    created_at INTEGER
 );

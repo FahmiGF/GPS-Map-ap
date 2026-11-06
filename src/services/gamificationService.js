@@ -87,7 +87,21 @@ const GamificationService = {
     const user = db.get('SELECT current_xp, level, nex_coins FROM users WHERE id = ?', [userId]);
     if (!user) return null;
 
-    const newXp = user.current_xp + xpToAdd;
+    // Guard against NaN/negative XP injections from bad callers
+    const safeXp = Number.isFinite(Number(xpToAdd)) ? Math.max(0, Math.floor(Number(xpToAdd))) : 0;
+    if (safeXp === 0) {
+      return {
+        userId,
+        addedXp: 0,
+        currentXp: user.current_xp,
+        level: user.level,
+        leveledUp: false,
+        bonusCoins: 0,
+        reason
+      };
+    }
+
+    const newXp = user.current_xp + safeXp;
     const calculatedLevel = this.getLevelFromXp(newXp);
     const leveledUp = calculatedLevel > user.level;
 
@@ -107,19 +121,40 @@ const GamificationService = {
     db.run(
       `INSERT INTO xp_events (id, user_id, amount, reason, created_at)
        VALUES (?, ?, ?, ?, ?)`,
-      [`xp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, userId, xpToAdd, reason, Date.now()]
+      [`xp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, userId, safeXp, reason, Date.now()]
     );
+
+    const NotificationService = require('./notificationService');
+
+    if (leveledUp) {
+      NotificationService.notify({
+        userId,
+        type: 'level_up',
+        title: `Naik ke Level ${calculatedLevel}!`,
+        body: `Selamat! Anda mendapat bonus ${bonusCoins} NEX Coins. Terus jelajahi NEXMAP dengan aman.`,
+        link: 'profile'
+      });
+    }
 
     // Achievements are evaluated on every XP change (cheap, deterministic)
     try {
-      require('./achievementService').evaluate(userId);
+      const unlocked = require('./achievementService').evaluate(userId);
+      for (const ach of unlocked) {
+        NotificationService.notify({
+          userId,
+          type: 'achievement',
+          title: `Achievement terbuka: ${ach.name}`,
+          body: `${ach.description} (+${ach.reward_coins || 0} NEX Coins)`,
+          link: 'gamification'
+        });
+      }
     } catch (_) {
       /* achievement engine must never break core XP flow */
     }
 
     return {
       userId,
-      addedXp: xpToAdd,
+      addedXp: safeXp,
       currentXp: newXp,
       level: calculatedLevel,
       leveledUp,

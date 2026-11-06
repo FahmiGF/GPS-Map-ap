@@ -1,4 +1,4 @@
-/* Comprehensive smoke test for NEXMAP API v1.1
+/* Comprehensive smoke test for NEXMAP API v1.2
  * Self-contained by default: seeds a temporary database and boots its own
  * server on a random port, so the suite is repeatable and never mutates dev data.
  * Set NEXMAP_SMOKE_BASE to test an already-running instance instead.
@@ -242,6 +242,83 @@ async function run() {
   const reply = await req('POST', `/api/admin/tickets/${ticket.data.id}/reply`, { reply: 'Sudah kami tangani.' });
   check('POST admin ticket reply', reply.status === 200 && reply.data.status === 'answered');
 
+  // Notifications
+  const notifications = await req('GET', '/api/notifications');
+  check('GET notifications', notifications.status === 200 && notifications.data.notifications.length >= 3);
+  check('notification unread count', notifications.data.unreadCount >= 2);
+  check('mission claim created notification', notifications.data.notifications.some(n => n.type === 'mission'));
+  const unreadOnly = await req('GET', '/api/notifications?unread=1');
+  check('GET unread notifications filter', unreadOnly.status === 200 && unreadOnly.data.notifications.every(n => n.is_read === 0));
+  const markOne = await req('POST', `/api/notifications/${notifications.data.notifications[0].id}/read`, {});
+  check('POST mark notification read', markOne.status === 200 && markOne.data.success);
+  const markAll = await req('POST', '/api/notifications/read-all', {});
+  check('POST mark all notifications read', markAll.status === 200 && markAll.data.unreadCount === 0);
+
+  // Trips history & stats
+  const trips = await req('GET', '/api/trips');
+  check('GET trip history', trips.status === 200 && trips.data.length >= 4);
+  check('trip history parses anti-cheat flags', Array.isArray(trips.data[0].anti_cheat_flags));
+  const tripStats = await req('GET', '/api/trips/stats');
+  check('GET trip stats', tripStats.status === 200 && tripStats.data.total_trips >= 4 && tripStats.data.total_km > 0);
+  check('trip stats has 7-day series', tripStats.data.last_7_days.length === 7);
+
+  // Saved places
+  const places = await req('GET', '/api/places');
+  check('GET saved places', places.status === 200 && places.data.length >= 3);
+  const newPlace = await req('POST', '/api/places', {
+    label: 'Kampus', address: 'Universitas Indonesia', lat: -6.3600, lon: 106.8270, icon: '🎓'
+  });
+  check('POST saved place', newPlace.status === 201 && newPlace.data.label === 'Kampus');
+  const dupPlace = await req('POST', '/api/places', {
+    label: 'Kampus', lat: -6.36, lon: 106.827
+  });
+  check('saved place duplicate rejected', dupPlace.status === 400);
+  const patchedPlace = await req('PATCH', `/api/places/${newPlace.data.id}`, { label: 'Kampus UI' });
+  check('PATCH saved place', patchedPlace.status === 200 && patchedPlace.data.label === 'Kampus UI');
+  const badPlace = await req('POST', '/api/places', { label: 'X', lat: 999, lon: 0 });
+  check('saved place validates input', badPlace.status === 400);
+  const delPlace = await req('DELETE', `/api/places/${newPlace.data.id}`);
+  check('DELETE saved place', delPlace.status === 200 && delPlace.data.success);
+
+  // Report comments
+  const seedComments = await req('GET', '/api/reports/rep-001/comments');
+  check('GET report comments', seedComments.status === 200 && seedComments.data.length >= 2);
+  const newComment = await req('POST', `/api/reports/${reportId}/comments`, { body: 'Konfirmasi dari warga sekitar.' });
+  check('POST report comment', newComment.status === 201 && newComment.data.author_name === 'NEX_Rider');
+  const spamComment = await req('POST', `/api/reports/${reportId}/comments`, { body: 'Konfirmasi dari warga sekitar.' });
+  check('duplicate comment rejected', spamComment.status === 400);
+  const shortComment = await req('POST', `/api/reports/${reportId}/comments`, { body: 'x' });
+  check('short comment rejected', shortComment.status === 400);
+  const delOtherComment = await req('DELETE', '/api/reports/comments/cmt-seed-1');
+  check('cannot delete another user comment', delOtherComment.status === 400);
+  const delOwnComment = await req('DELETE', `/api/reports/comments/${newComment.data.id}`);
+  check('DELETE own comment', delOwnComment.status === 200 && delOwnComment.data.success);
+  const reportDetail = await req('GET', `/api/reports/${reportId}`);
+  check('report detail exposes comment count', typeof reportDetail.data.commentCount === 'number');
+
+  // Emergency contacts
+  const contacts = await req('GET', '/api/safety/contacts');
+  check('GET emergency contacts', contacts.status === 200 && contacts.data.length >= 1);
+  const badContact = await req('POST', '/api/safety/contacts', { name: 'Tes', phone: 'abc' });
+  check('emergency contact validates phone', badContact.status === 400);
+  const newContact = await req('POST', '/api/safety/contacts', {
+    name: 'Rekan Kerja', phone: '+6281211112222', relationship: 'Rekan'
+  });
+  check('POST emergency contact', newContact.status === 201);
+  const delContact = await req('DELETE', `/api/safety/contacts/${newContact.data.id}`);
+  check('DELETE emergency contact', delContact.status === 200);
+
+  // Admin analytics & CSV export
+  const analytics = await req('GET', '/api/admin/analytics');
+  check('GET admin analytics', analytics.status === 200 && Array.isArray(analytics.data.reportsByCategory) && analytics.data.reportsLast7Days.length === 7);
+  check('analytics has revenue + trips', typeof analytics.data.revenueIdr === 'number' && analytics.data.trips.total >= 3);
+
+  const csvRes = await fetch(BASE + '/api/admin/export/reports');
+  const csvText = await csvRes.text();
+  check('GET CSV export reports', csvRes.status === 200 && (csvRes.headers.get('content-type') || '').includes('text/csv') && csvText.includes('category'));
+  const badCsv = await req('GET', '/api/admin/export/nonsense');
+  check('CSV export rejects unknown dataset', badCsv.status === 404);
+
   // Store
   const store = await req('GET', '/api/store/items');
   check('GET /api/store/items (is_active fix)', store.status === 200 && store.data.items.length >= 10);
@@ -326,6 +403,17 @@ async function run() {
   // UU PDP
   const exported = await req('GET', '/api/user/export');
   check('GET user data export', exported.status === 200 && exported.data.profile);
+
+  // PWA assets
+  const manifestRes = await fetch(BASE + '/manifest.json');
+  const manifest = await manifestRes.json();
+  check('GET PWA manifest', manifestRes.status === 200 && manifest.short_name === 'NEXMAP' && Array.isArray(manifest.icons));
+  const swRes = await fetch(BASE + '/sw.js');
+  check('GET service worker', swRes.status === 200 && (await swRes.text()).includes('CACHE_NAME'));
+  const offlineRes = await fetch(BASE + '/offline.html');
+  check('GET offline page', offlineRes.status === 200 && (await offlineRes.text()).includes('offline'));
+  const iconRes = await fetch(BASE + '/icons/icon.svg');
+  check('GET PWA icon', iconRes.status === 200 && (iconRes.headers.get('content-type') || '').includes('svg'));
 
   // 404 handler
   const notFound = await req('GET', '/api/does-not-exist');

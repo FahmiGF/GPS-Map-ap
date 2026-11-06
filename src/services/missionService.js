@@ -104,6 +104,14 @@ const MissionService = {
     const GamificationService = require('./gamificationService');
     GamificationService.addXp(userId, mission.reward_xp, `mission_${missionId}`);
 
+    require('./notificationService').notify({
+      userId,
+      type: 'mission',
+      title: `Misi selesai: ${mission.title}`,
+      body: `Hadiah +${mission.reward_xp} XP dan +${mission.reward_coins} NEX Coins telah ditambahkan.`,
+      link: 'gamification'
+    });
+
     return {
       success: true,
       missionId,

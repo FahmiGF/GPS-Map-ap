@@ -1,5 +1,5 @@
 // =============================================================
-// NEXMAP Client Application v1.1
+// NEXMAP Client Application v1.2
 // =============================================================
 'use strict';
 
@@ -122,8 +122,14 @@ function openModal(id) {
     loadMyTickets();
   } else if (id === 'admin-modal') {
     loadAdminOverview();
+    loadAdminAnalytics();
   } else if (id === 'safety-modal') {
     loadActiveSos();
+    loadEmergencyContacts();
+  } else if (id === 'notifications-modal') {
+    loadNotifications();
+  } else if (id === 'trips-modal') {
+    loadTrips();
   }
 }
 
@@ -207,6 +213,12 @@ function initWebSocket() {
       case 'TRAFFIC_NEWS':
         showGlobalAlert(`📰 ${msg.data.headline}`, 'info');
         loadQuickNews();
+        break;
+      case 'NOTIFICATION':
+        handleIncomingNotification(msg.data);
+        break;
+      case 'REPORT_COMMENT':
+        handleIncomingComment(msg.data);
         break;
       default:
         break;
@@ -382,8 +394,10 @@ window.openVoteModal = async (reportId) => {
           <button onclick="submitVote('${esc(r.id)}','resolved')" class="action-btn-primary" style="justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);">• Sudah Selesai / Lancar</button>
           <button onclick="submitVote('${esc(r.id)}','fake')" class="action-btn-danger" style="justify-content:center;">✗ Laporan Palsu / Hoaks</button>
         </div>
+        <div id="report-comments-${esc(r.id)}" class="report-comments"></div>
       </div>`;
     openModal('vote-modal');
+    loadReportComments(r.id);
   } catch (err) {
     showGlobalAlert(err.message, 'danger');
   }
@@ -456,6 +470,8 @@ function applyUserProfile(user) {
   document.getElementById('hud-title').textContent = user.active_title || 'Novice';
   document.getElementById('hud-xp-fill').style.width = `${user.progressPercent || 0}%`;
   document.getElementById('hud-avatar-icon').textContent = user.active_vehicle_icon || '🏍️';
+
+  if (typeof user.unreadNotifications === 'number') updateNotifBadge(user.unreadNotifications);
 
   if (user.active_skin) setMapSkin(user.active_skin);
 
@@ -990,8 +1006,418 @@ window.replyTicket = async (ticketId) => {
 };
 
 // =============================================================
-// EVENT LISTENERS
+// NOTIFICATIONS
 // =============================================================
+function updateNotifBadge(count) {
+  const badge = document.getElementById('notif-badge');
+  if (!badge) return;
+  const n = Number(count) || 0;
+  badge.textContent = n > 99 ? '99+' : String(n);
+  badge.style.display = n > 0 ? 'inline-flex' : 'none';
+}
+
+function renderNotificationRow(n) {
+  return `
+    <div class="notif-row ${n.is_read ? '' : 'unread'}" data-notif-id="${esc(n.id)}" data-notif-link="${esc(n.link || '')}">
+      <div class="notif-icon">${notifIcon(n.type)}</div>
+      <div class="notif-body">
+        <div class="notif-title">${esc(n.title)}</div>
+        ${n.body ? `<div class="notif-text">${esc(n.body)}</div>` : ''}
+        <div class="notif-meta">${esc(timeAgo(n.created_at))}</div>
+      </div>
+      ${n.is_read ? '' : '<span class="notif-dot"></span>'}
+    </div>`;
+}
+
+function notifIcon(type) {
+  const map = {
+    level_up: '🏆',
+    achievement: '🎖️',
+    mission: '🎯',
+    follow: '👥',
+    comment: '💬',
+    ticket: '🎫',
+    payment: '💳',
+    moderation: '🛡️',
+    report_verified: '✅',
+    report_rejected: '⛔',
+    report_resolved: '🏁'
+  };
+  return map[type] || '🔔';
+}
+
+async function loadNotifications() {
+  try {
+    const data = await api('/api/notifications?limit=100');
+    updateNotifBadge(data.unreadCount);
+    const list = document.getElementById('notifications-list');
+    if (!list) return;
+    document.getElementById('notif-summary').textContent =
+      data.notifications.length
+        ? `${data.notifications.length} notifikasi • ${data.unreadCount} belum dibaca`
+        : 'Belum ada notifikasi';
+    list.innerHTML = data.notifications.length
+      ? data.notifications.map(renderNotificationRow).join('')
+      : '<div class="empty-state">Notifikasi akan muncul di sini saat ada aktivitas baru.</div>';
+
+    list.querySelectorAll('[data-notif-id]').forEach(row => {
+      row.addEventListener('click', () =>
+        handleNotificationClick(row.dataset.notifId, row.dataset.notifLink));
+    });
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+async function refreshNotifBadge() {
+  try {
+    const data = await api('/api/notifications?unread=1&limit=1');
+    updateNotifBadge(data.unreadCount);
+  } catch (_) {
+    /* badge refresh must never break the UI */
+  }
+}
+
+async function markNotificationRead(id) {
+  try {
+    const res = await postJson(`/api/notifications/${id}/read`, {});
+    updateNotifBadge(res.unreadCount);
+    await loadNotifications();
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+async function handleNotificationClick(id, link) {
+  try {
+    const res = await postJson(`/api/notifications/${id}/read`, {});
+    updateNotifBadge(res.unreadCount);
+  } catch (_) {
+    /* clicking must still navigate even if read-state fails */
+  }
+  if (link && link.startsWith('report:')) {
+    closeAllModals();
+    window.openVoteModal(link.slice('report:'.length));
+  } else if (['profile', 'gamification', 'store', 'help'].includes(link)) {
+    openModal(`${link}-modal`);
+  } else {
+    await loadNotifications();
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    const res = await postJson('/api/notifications/read-all', {});
+    updateNotifBadge(res.unreadCount);
+    await loadNotifications();
+    showGlobalAlert('Semua notifikasi ditandai dibaca.', 'success');
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+async function clearNotifications() {
+  if (!confirm('Hapus semua notifikasi? Tindakan ini tidak dapat dibatalkan.')) return;
+  try {
+    const res = await api('/api/notifications', { method: 'DELETE' });
+    updateNotifBadge(res.unreadCount);
+    await loadNotifications();
+    showGlobalAlert('Notifikasi dihapus.', 'success');
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+function handleIncomingNotification(n) {
+  if (!n) return;
+  if (currentUser) currentUser.unreadNotifications = (currentUser.unreadNotifications || 0) + 1;
+  refreshNotifBadge();
+  const list = document.getElementById('notifications-list');
+  if (list && document.getElementById('notifications-modal').classList.contains('open')) {
+    loadNotifications();
+  } else {
+    showGlobalAlert(`🔔 ${n.title}`, 'info');
+  }
+}
+
+// =============================================================
+// TRIPS
+// =============================================================
+const VEHICLE_LABELS = {
+  motorcycle: '🏍️ Motor',
+  car: '🚗 Mobil',
+  bus: '🚌 Bus',
+  truck: '🚚 Truk',
+  bicycle: '🚲 Sepeda'
+};
+
+async function loadTrips() {
+  try {
+    const [stats, history] = await Promise.all([api('/api/trips/stats'), api('/api/trips?limit=40')]);
+    renderTripStats(stats);
+    renderTripWeek(stats.last_7_days || []);
+    renderTripHistory(history);
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+function renderTripStats(s) {
+  const container = document.getElementById('trip-stats-grid');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="stat-box"><b>${esc(s.total_trips)}</b><span>Total Perjalanan</span></div>
+    <div class="stat-box"><b style="color:var(--accent-cyan);">${esc(s.total_km)}</b><span>Kilometer</span></div>
+    <div class="stat-box"><b style="color:var(--accent-gold);">${esc(s.total_hours)}</b><span>Jam Berkendara</span></div>
+    <div class="stat-box"><b style="color:var(--accent-green);">${esc(s.avg_speed_kmh)}</b><span>Rata-rata km/j</span></div>
+    <div class="stat-box"><b>${esc(s.valid_trips)}</b><span>Valid</span></div>
+    <div class="stat-box"><b style="color:var(--accent-red);">${esc(s.rejected_trips)}</b><span>Ditolak</span></div>
+    <div class="stat-box"><b>${esc(s.top_speed_kmh)}</b><span>Kecepatan Maks</span></div>
+    <div class="stat-box"><b style="color:var(--accent-purple);">${esc(s.total_xp)}</b><span>XP Diperoleh</span></div>`;
+}
+
+function renderTripWeek(days) {
+  const container = document.getElementById('trip-week-bars');
+  if (!container) return;
+  if (!days.length) {
+    container.innerHTML = '<div class="empty-state">Belum ada data perjalanan mingguan.</div>';
+    return;
+  }
+  const max = Math.max(1, ...days.map(d => d.km));
+  container.innerHTML = days.map(d => {
+    const pct = Math.max(4, Math.round((d.km / max) * 100));
+    return `
+      <div class="trip-bar-col" title="${esc(d.km)} km • ${esc(d.trips)} perjalanan">
+        <div class="trip-bar-value">${d.km > 0 ? esc(d.km) : ''}</div>
+        <div class="trip-bar-track"><div class="trip-bar-fill" style="height:${pct}%"></div></div>
+        <div class="trip-bar-label">${esc(d.date.slice(5))}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderTripHistory(trips) {
+  const container = document.getElementById('trip-history-list');
+  if (!container) return;
+  if (!trips.length) {
+    container.innerHTML = '<div class="empty-state">Belum ada perjalanan tercatat. Selesaikan perjalanan pertama Anda!</div>';
+    return;
+  }
+  container.innerHTML = trips.map(t => `
+    <div class="trip-row ${t.is_valid ? '' : 'invalid'}">
+      <div class="trip-row-main">
+        <b>${esc(VEHICLE_LABELS[t.vehicle_type] || t.vehicle_type)}</b>
+        <span>${esc(t.distance_km)} km • ${esc(t.duration_mins)} mnt • ${esc(t.avg_speed_kmh)} km/j</span>
+      </div>
+      <div class="trip-row-side">
+        <span class="trip-xp">+${esc(t.earned_xp)} XP</span>
+        <span class="trip-time">${esc(timeAgo(t.created_at))}</span>
+        ${t.is_valid ? '<span class="chip verified">valid</span>' : '<span class="chip danger">ditolak</span>'}
+      </div>
+    </div>`).join('');
+}
+
+// =============================================================
+// SAVED PLACES
+// =============================================================
+async function loadSavedPlaces() {
+  try {
+    const places = await api('/api/places');
+    const container = document.getElementById('saved-places-list');
+    if (!container) return;
+    container.innerHTML = places.length
+      ? places.map(p => `
+        <div class="saved-place-chip">
+          <button class="saved-place-open" title="Jadikan tujuan"
+                  onclick="useSavedPlace(${Number(p.lat)}, ${Number(p.lon)}, '${esc(p.label)}')">
+            <span>${esc(p.icon || '📍')}</span> ${esc(p.label)}
+          </button>
+          <button class="saved-place-del" title="Hapus" onclick="deleteSavedPlace('${esc(p.id)}')">×</button>
+        </div>`).join('')
+      : '<div style="font-size:10.5px;color:var(--text-muted);">Belum ada tempat tersimpan.</div>';
+  } catch (err) {
+    console.error('loadSavedPlaces', err);
+  }
+}
+
+window.useSavedPlace = (lat, lon, label) => {
+  currentNavigationCoords.toLat = lat;
+  currentNavigationCoords.toLon = lon;
+  document.getElementById('nav-destination').value = label;
+  loadNavigationRoute();
+  showGlobalAlert(`Tujuan diatur ke ${label}.`, 'success');
+};
+
+async function saveCurrentDestination() {
+  const label = prompt('Nama tempat (mis. Rumah, Kantor):', document.getElementById('nav-destination').value.trim());
+  if (!label) return;
+  try {
+    await postJson('/api/places', {
+      label,
+      address: document.getElementById('nav-destination').value.trim(),
+      lat: currentNavigationCoords.toLat,
+      lon: currentNavigationCoords.toLon,
+      icon: '⭐'
+    });
+    showGlobalAlert('Tempat berhasil disimpan.', 'success');
+    loadSavedPlaces();
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+window.deleteSavedPlace = async (placeId) => {
+  if (!confirm('Hapus tempat tersimpan ini?')) return;
+  try {
+    await api(`/api/places/${placeId}`, { method: 'DELETE' });
+    loadSavedPlaces();
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+};
+
+// =============================================================
+// EMERGENCY CONTACTS
+// =============================================================
+async function loadEmergencyContacts() {
+  try {
+    const contacts = await api('/api/safety/contacts');
+    const container = document.getElementById('emergency-contacts-list');
+    if (!container) return;
+    container.innerHTML = contacts.length
+      ? contacts.map(c => `
+        <div class="contact-row">
+          <div>
+            <b>${esc(c.name)}</b>
+            <span>${esc(c.phone)} • ${esc(c.relationship || 'Kontak')}</span>
+          </div>
+          <button class="btn-mini red" onclick="deleteEmergencyContact('${esc(c.id)}')">Hapus</button>
+        </div>`).join('')
+      : '<div style="font-size:10.5px;color:var(--text-muted);">Belum ada kontak darurat.</div>';
+  } catch (err) {
+    console.error('loadEmergencyContacts', err);
+  }
+}
+
+async function addEmergencyContact() {
+  const name = document.getElementById('contact-name').value.trim();
+  const phone = document.getElementById('contact-phone').value.trim();
+  const relationship = document.getElementById('contact-relation').value.trim();
+  if (!name || !phone) {
+    showGlobalAlert('Nama dan nomor telepon wajib diisi.', 'danger');
+    return;
+  }
+  try {
+    await postJson('/api/safety/contacts', { name, phone, relationship });
+    document.getElementById('contact-name').value = '';
+    document.getElementById('contact-phone').value = '';
+    document.getElementById('contact-relation').value = '';
+    showGlobalAlert('Kontak darurat ditambahkan.', 'success');
+    loadEmergencyContacts();
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+}
+
+window.deleteEmergencyContact = async (id) => {
+  if (!confirm('Hapus kontak darurat ini?')) return;
+  try {
+    await api(`/api/safety/contacts/${id}`, { method: 'DELETE' });
+    loadEmergencyContacts();
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+};
+
+// =============================================================
+// REPORT COMMENTS
+// =============================================================
+async function loadReportComments(reportId) {
+  const container = document.getElementById(`report-comments-${reportId}`);
+  if (!container) return;
+  try {
+    const comments = await api(`/api/reports/${reportId}/comments`);
+    container.innerHTML = `
+      <h4 class="comment-heading">💬 Diskusi (${comments.length})</h4>
+      <div class="comment-list">
+        ${comments.length
+          ? comments.map(c => `
+            <div class="comment-row">
+              <div class="comment-author">${esc(c.author_name)} <span>${esc(timeAgo(c.created_at))}</span></div>
+              <div class="comment-text">${esc(c.body)}</div>
+            </div>`).join('')
+          : '<div class="empty-state">Belum ada komentar. Berikan info tambahan.</div>'}
+      </div>
+      <div class="comment-compose">
+        <input type="text" id="comment-input-${esc(reportId)}" maxlength="500" placeholder="Tulis komentar (min. 3 karakter)..." />
+        <button class="btn-mini" onclick="submitReportComment('${esc(reportId)}')">Kirim</button>
+      </div>`;
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
+  }
+}
+
+window.submitReportComment = async (reportId) => {
+  const input = document.getElementById(`comment-input-${reportId}`);
+  const body = input ? input.value.trim() : '';
+  if (body.length < 3) {
+    showGlobalAlert('Komentar minimal 3 karakter.', 'danger');
+    return;
+  }
+  try {
+    await postJson(`/api/reports/${reportId}/comments`, { body });
+    if (input) input.value = '';
+    loadReportComments(reportId);
+  } catch (err) {
+    showGlobalAlert(err.message, 'danger');
+  }
+};
+
+function handleIncomingComment(comment) {
+  if (!comment) return;
+  const container = document.getElementById(`report-comments-${comment.report_id}`);
+  if (container) loadReportComments(comment.report_id);
+}
+
+// =============================================================
+// ADMIN ANALYTICS
+// =============================================================
+async function loadAdminAnalytics() {
+  const container = document.getElementById('adm-analytics');
+  if (!container) return;
+  try {
+    const data = await api('/api/admin/analytics');
+    const maxDay = Math.max(1, ...data.reportsLast7Days.map(d => d.reports));
+    const statusChips = data.reportsByStatus.map(s =>
+      `<span class="chip info">${esc(s.status)}: ${esc(s.count)}</span>`).join('');
+    const categoryRows = data.reportsByCategory.map(c => `
+      <div class="analytics-row">
+        <span>${esc(CATEGORY_ICONS[c.category] || '⚠️')} ${esc(c.category)}</span>
+        <div class="analytics-track"><div class="analytics-fill" style="width:${Math.round((c.count / Math.max(1, data.reportsByCategory[0].count)) * 100)}%"></div></div>
+        <b>${esc(c.count)}</b>
+      </div>`).join('');
+
+    container.innerHTML = `
+      <div class="analytics-summary">
+        <div class="stat-box"><b>${esc(data.trips.total)}</b><span>Perjalanan</span></div>
+        <div class="stat-box"><b style="color:var(--accent-cyan);">${esc(data.trips.km)}</b><span>Total km</span></div>
+        <div class="stat-box"><b style="color:var(--accent-green);">Rp ${Number(data.revenueIdr).toLocaleString('id-ID')}</b><span>Pendapatan</span></div>
+        <div class="stat-box"><b>${esc(data.paidTransactions)}</b><span>Transaksi Lunas</span></div>
+      </div>
+      <div class="analytics-chips">${statusChips}</div>
+      <div class="analytics-categories">${categoryRows || '<div class="empty-state">Belum ada laporan.</div>'}</div>
+      <div class="analytics-week">
+        ${data.reportsLast7Days.map(d => `
+          <div class="analytics-day" title="${esc(d.date)}: ${esc(d.reports)} laporan">
+            <div class="analytics-day-bar" style="height:${Math.max(4, Math.round((d.reports / maxDay) * 100))}%"></div>
+            <span>${esc(d.date.slice(5))}</span>
+          </div>`).join('')}
+      </div>`;
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
+  }
+}
+
+
 function setupUIEventListeners() {
   // Nav tabs
   document.querySelectorAll('[data-modal]').forEach(btn => {
@@ -1278,6 +1704,29 @@ function setupUIEventListeners() {
       showGlobalAlert(err.message, 'danger');
     }
   });
+
+  // Notifications
+  document.getElementById('btn-open-notifications').addEventListener('click', () => {
+    openModal('notifications-modal');
+  });
+  document.getElementById('btn-notif-read-all').addEventListener('click', markAllNotificationsRead);
+  document.getElementById('btn-notif-clear').addEventListener('click', clearNotifications);
+
+  // Saved places
+  document.getElementById('btn-save-destination').addEventListener('click', saveCurrentDestination);
+
+  // Emergency contacts
+  document.getElementById('btn-add-contact').addEventListener('click', addEmergencyContact);
+  document.getElementById('contact-phone').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addEmergencyContact(); }
+  });
+
+  // Admin CSV export
+  document.querySelectorAll('[data-export]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      window.location.href = `/api/admin/export/${btn.dataset.export}`;
+    });
+  });
 }
 
 // =============================================================
@@ -1292,6 +1741,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadReportsFeed();
   await loadNavigationRoute();
   await loadQuickNews();
+  await loadSavedPlaces();
+  refreshNotifBadge();
+
+  // PWA service worker (offline shell + cached assets)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      console.warn('Service worker registration failed', err);
+    });
+  }
 
   try {
     const [segments, summary] = await Promise.all([

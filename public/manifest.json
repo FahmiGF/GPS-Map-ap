@@ -1,0 +1,28 @@
+{
+  "name": "NEXMAP — GPS & Smart Mobility Indonesia",
+  "short_name": "NEXMAP",
+  "description": "Navigasi, lalu lintas langsung, laporan komunitas, dan keselamatan berkendara di Indonesia.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "categories": ["navigation", "travel", "social"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

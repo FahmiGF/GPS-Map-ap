@@ -19,6 +19,7 @@ function runMigrations(db) {
   addColumnIfMissing('users', 'two_factor_enabled', 'INTEGER DEFAULT 0');
   addColumnIfMissing('users', 'active_vehicle_icon', 'TEXT');
   addColumnIfMissing('users', 'city', "TEXT DEFAULT 'Jakarta'");
+  addColumnIfMissing('emergency_contacts', 'created_at', 'INTEGER');
 
   // ---------- New tables ----------
   db.exec(`
@@ -123,11 +124,46 @@ function runMigrations(db) {
       free_flow_kmh REAL NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      link TEXT,
+      is_read INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS saved_places (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      address TEXT,
+      lat REAL NOT NULL,
+      lon REAL NOT NULL,
+      icon TEXT DEFAULT '📍',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS report_comments (
+      id TEXT PRIMARY KEY,
+      report_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT DEFAULT 'visible',
+      created_at INTEGER NOT NULL
+    );
   `);
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_xp_events_user ON xp_events(user_id, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_reports_expires ON live_reports(expires_at)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_saved_places_user ON saved_places(user_id, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_report ON report_comments(report_id, created_at)');
 }
 
 module.exports = runMigrations;

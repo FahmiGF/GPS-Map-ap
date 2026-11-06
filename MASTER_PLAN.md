@@ -480,7 +480,7 @@ CREATE TABLE topup_transactions (
 
 ---
 
-## 13. Status Implementasi v1.1 (Living Document)
+## 13. Status Implementasi v1.2 (Living Document)
 
 Bagian ini mencatat realisasi teknis dari cetak biru di atas pada prototipe berjalan.
 
@@ -497,7 +497,12 @@ Bagian ini mencatat realisasi teknis dari cetak biru di atas pada prototipe berj
 | Sosial | ✅ | Profil publik, follow/unfollow, leaderboard teman |
 | Help Center | ✅ | FAQ berkategori + pencarian, tiket dukungan |
 | Upload Bukti | ✅ Prototipe | Validasi MIME & ukuran, penyimpanan lokal |
+| Notifikasi & Diskusi | ✅ | Pusat notifikasi persisten + realtime, komentar laporan dengan anti-spam |
+| Riwayat & Tempat Favorit | ✅ | Statistik perjalanan 7 hari, hingga 20 tempat tersimpan |
+| Kontak Darurat | ✅ | CRUD hingga 10 kontak, dipakai alur SOS |
+| Analitik Admin | ✅ | Kategori/status laporan, tren 7 hari, pendapatan, ekspor CSV aman |
+| PWA & Offline | ✅ | Manifest, service worker cache, halaman offline, ikon |
 | Autentikasi & Otorisasi | ⏳ Belum | Demo user tunggal `usr-demo-001` |
 | PostGIS / Skala Produksi | ⏳ Belum | SQLite kompatibel; perlu PostgreSQL/PostGIS, MQTT, object storage |
 
-**Verifikasi:** `npm test` (6 unit test) + `npm run smoke` (74 pemeriksaan API) — seluruhnya lulus.
+**Verifikasi:** `npm test` (10 unit test) + `npm run smoke` (109 pemeriksaan API) — seluruhnya lulus.
