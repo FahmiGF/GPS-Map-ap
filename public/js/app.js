@@ -65,20 +65,29 @@ const MAP_SKIN_TILES = {
   }
 };
 
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>';
+const ESRI_ATTRIBUTION = '&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
+
 let mapTileConfig = {
   url: MAP_SKIN_TILES.cyberpunk.url,
-  attribution: MAP_SKIN_TILES.cyberpunk.attribution
+  attribution: OSM_ATTRIBUTION,
+  providers: [MAP_SKIN_TILES.cyberpunk.url],
+  providerIndex: 0,
+  tileErrors: 0
 };
 
 async function loadMapConfig() {
   try {
     const cfg = await api('/api/config');
-    if (cfg && typeof cfg.tileUrl === 'string' && /^https:\/\//.test(cfg.tileUrl)) {
-      mapTileConfig.url = cfg.tileUrl;
-      mapTileConfig.attribution = cfg.usesOpenStreetMap
-        ? '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
-        : '&copy; Peta oleh penyedia tile terkonfigurasi';
-    }
+    if (!cfg || typeof cfg.tileUrl !== 'string' || !/^https:\/\//.test(cfg.tileUrl)) return;
+    const fallbacks = Array.isArray(cfg.fallbackTileUrls)
+      ? cfg.fallbackTileUrls.filter(u => typeof u === 'string' && /^https:\/\//.test(u))
+      : [];
+    mapTileConfig.providers = [cfg.tileUrl, ...fallbacks];
+    mapTileConfig.url = cfg.tileUrl;
+    mapTileConfig.providerIndex = 0;
+    mapTileConfig.tileErrors = 0;
+    mapTileConfig.attribution = cfg.usesOpenStreetMap ? OSM_ATTRIBUTION : '&copy; Penyedia tile terkonfigurasi';
   } catch (_) {
     /* keep OpenStreetMap default when config is unavailable */
   }
@@ -189,11 +198,34 @@ function setMapSkin(skinKey) {
   if (tileUrl.includes('{s}')) options.subdomains = 'abc';
 
   activeTileLayer = L.tileLayer(tileUrl, options).addTo(map);
+  activeTileLayer.on('tileerror', handleTileError);
 
   const container = document.getElementById('map-container');
   container.classList.remove('map-skin-cyberpunk', 'map-skin-dark_gold', 'map-skin-synthwave');
   container.classList.add(`map-skin-${key}`);
+  container.classList.toggle('tile-provider-esri', /arcgisonline\.com/.test(tileUrl));
   currentActiveSkin = key;
+}
+
+function handleTileError() {
+  mapTileConfig.tileErrors += 1;
+  if (mapTileConfig.tileErrors < 4) return;
+
+  if (mapTileConfig.providerIndex >= mapTileConfig.providers.length - 1) {
+    if (mapTileConfig.tileErrors === 4) {
+      showGlobalAlert('Peta gagal dimuat. Periksa koneksi internet atau pengaturan firewall Anda.', 'danger');
+    }
+    return;
+  }
+
+  mapTileConfig.providerIndex += 1;
+  mapTileConfig.url = mapTileConfig.providers[mapTileConfig.providerIndex];
+  mapTileConfig.tileErrors = 0;
+  mapTileConfig.attribution = /arcgisonline\.com/.test(mapTileConfig.url)
+    ? ESRI_ATTRIBUTION
+    : OSM_ATTRIBUTION;
+  showGlobalAlert('Penyedia tile utama gagal dimuat. Beralih ke penyedia cadangan...', 'info');
+  setMapSkin(currentActiveSkin);
 }
 
 // =============================================================

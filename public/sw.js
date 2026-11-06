@@ -1,5 +1,5 @@
 /* NEXMAP Service Worker — offline shell + asset cache */
-const CACHE_NAME = 'nexmap-v1.3';
+const CACHE_NAME = 'nexmap-v1.4';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
@@ -52,19 +52,17 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Static assets: cache first, refresh in background
+  // Static assets: network first so deploys are picked up immediately,
+  // falling back to the cache when offline.
   event.respondWith(
-    caches.match(request).then(cached => {
-      const network = fetch(request)
-        .then(res => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(request, copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(request)
+      .then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => caches.match(request))
   );
 });

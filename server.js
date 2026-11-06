@@ -164,15 +164,21 @@ app.get('/api/meta', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// MAP CONFIG (key-free tiles by default)
+// MAP CONFIG (key-free tiles by default, with automatic fallback)
 // -------------------------------------------------------------
 const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const FALLBACK_TILE_URLS = [
+  'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+];
 
 app.get('/api/config', (req, res) => {
+  const custom = process.env.NEXMAP_TILE_URL;
   res.json({
     version: '1.2.0',
-    tileUrl: process.env.NEXMAP_TILE_URL || DEFAULT_TILE_URL,
-    usesOpenStreetMap: !process.env.NEXMAP_TILE_URL
+    tileUrl: custom || DEFAULT_TILE_URL,
+    fallbackTileUrls: FALLBACK_TILE_URLS,
+    usesOpenStreetMap: !custom
   });
 });
 

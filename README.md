@@ -53,7 +53,7 @@ nexmap/
 │   └── js/
 │       └── app.js                  # Engine client interaktif (Leaflet Map, WS, Modals, State)
 ├── scripts/
-│   ├── smoke.js                    # End-to-end API smoke test (110 pemeriksaan)
+│   ├── smoke.js                    # End-to-end API smoke test (111 pemeriksaan)
 │   └── inspect.js                  # Inspeksi tabel & kolom database
 └── tests/
     └── nexmap.test.js              # Unit & Integration Test Suite komprehensif
@@ -98,6 +98,10 @@ export NEXMAP_TILE_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 
 Gunakan placeholder `{z}`, `{x}`, `{y}`; `{s}` juga didukung bila penyedia memakai subdomain. Jika Anda memakai layanan ber-key, sertakan key langsung pada URL template. Konfigurasi aktif dapat dicek di `GET /api/config`.
 
+> Catatan: URL template seperti `https://tile.openstreetmap.org/{z}/{x}/{y}.png` **tidak bisa dibuka langsung di browser** karena `{z}/{x}/{y}` harus diganti Leaflet dengan nomor tile. Contoh tile valid: `https://tile.openstreetmap.org/12/3277/2128.png`.
+>
+> Jika penyedia utama gagal dimuat, klien otomatis beralih ke penyedia cadangan (OSM France HOT, lalu Esri World Dark Gray).
+
 ---
 
 ## 🧪 Menjalankan Automated Test Suite
@@ -109,7 +113,7 @@ npm test
 
 Untuk pengujian end-to-end seluruh REST API:
 ```bash
-npm run smoke      # menyalakan server + database sementara sendiri, 110 pemeriksaan API
+npm run smoke      # menyalakan server + database sementara sendiri, 111 pemeriksaan API
 npm run verify     # unit test + smoke test sekaligus
 ```
 

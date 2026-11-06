@@ -858,6 +858,11 @@ main.main-viewport {
 .map-skin-synthwave .leaflet-tile-pane {
   filter: invert(0.95) hue-rotate(255deg) saturate(1.6) brightness(0.9) contrast(1.05);
 }
+
+/* Esri World Dark Gray is already dark — avoid double inversion on fallback */
+.tile-provider-esri.map-skin-cyberpunk .leaflet-tile-pane { filter: brightness(1.08) contrast(1.05) saturate(1.1); }
+.tile-provider-esri.map-skin-dark_gold .leaflet-tile-pane { filter: sepia(0.45) saturate(1.3) brightness(0.95); }
+.tile-provider-esri.map-skin-synthwave .leaflet-tile-pane { filter: hue-rotate(230deg) saturate(1.7) brightness(1.05); }
 .leaflet-control-attribution {
   background: rgba(10, 14, 23, 0.85) !important;
   color: #64748b !important;

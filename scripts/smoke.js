@@ -101,6 +101,7 @@ async function run() {
 
   const mapConfig = await req('GET', '/api/config');
   check('GET /api/config tile URL is key-free', mapConfig.status === 200 && /^https:\/\//.test(mapConfig.data.tileUrl) && !mapConfig.data.tileUrl.includes('cartocdn.com'));
+  check('map config exposes fallback providers', Array.isArray(mapConfig.data.fallbackTileUrls) && mapConfig.data.fallbackTileUrls.length >= 1);
 
   const profile = await req('GET', '/api/user/profile');
   check('GET /api/user/profile', profile.status === 200 && profile.data.username === 'NEX_Rider');
